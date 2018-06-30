@@ -1,0 +1,17 @@
+.canvas-container {
+    position: absolute;
+}
+
+#memoryCanvasContainer {
+    left: 5px;
+}
+
+#SMCanvasContainer {
+    left: 650px;
+}
+
+canvas {
+    margin-bottom: 5px;
+    border-style: solid;
+    border-width: 1px;
+}
