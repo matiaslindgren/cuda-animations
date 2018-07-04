@@ -4,10 +4,17 @@ Runs in web browsers that support the HTML5 [Canvas API](https://developer.mozil
 The main goal of this project is to provide intuitive visualizations of the challenges related to data locality when programming CUDA-supported GPUs.
 As a consequence, many relevant hardware-level details have been omitted in favor of simplicity.
 
+## Global memory access
+
 One of the most important performance aspects to consider when writing CUDA programs for GPUs is the theoretical memory bandwidth, which greatly limits the performance of GPUs [1][2][3].
 Mei and Chu point out that while NVIDIA's GTX 980 has a computational power of 4612 GFlop/s, its theoretical memory bandwidth is only 224 GB/s [4].
 They argue that the actual memory bandwidth is even lower, which makes it such a significant bottleneck [1].
 It seems that this gap has only increased with NVIDIA's GTX 1080 card, which NVIDIA reports having a computational power of 8873 GFlop/s, while the theoretical memory bandwidth is limited to 320 GB/s [5].
+
+When a thread warp requests access to global memory, the amount of memory transactions generated depends on the alignment of the data being accessed [2].
+In the best case scenario, all 32 threads of a warp access consecutive, naturally aligned 4-byte words.
+All words fit neatly into one 128-byte cache line and the GPU can fetch all words using a single 128-byte memory transaction.
+However, if the memory accesses are scattered, the GPU has to access the data using multiple transactions, which reduces the memory throughput.
 
 ## References
 
