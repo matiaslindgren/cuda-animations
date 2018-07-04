@@ -12,8 +12,8 @@ They argue that the actual memory bandwidth is even lower, which makes it such a
 It seems that this gap has only increased with NVIDIA's GTX 1080 card, which NVIDIA reports having a computational power of 8873 GFlop/s, while the theoretical memory bandwidth is limited to 320 GB/s [5].
 
 When a thread warp requests access to global memory, the amount of memory transactions generated depends on the alignment of the data being accessed [2].
-In the best case scenario, all 32 threads of a warp access consecutive, naturally aligned 4-byte words.
-All words fit neatly into one 128-byte cache line and the GPU can fetch all words using a single 128-byte memory transaction.
+In the best case scenario, all 32 threads of a warp access consecutive, naturally aligned addresses of 4-byte words.
+In this case, all words fit neatly into one 128-byte cache line and the GPU can fetch all words using a single 128-byte memory transaction.
 However, if the memory accesses are scattered, the GPU has to access the data using multiple transactions, which reduces the memory throughput.
 
 ## References
