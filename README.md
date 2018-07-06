@@ -4,7 +4,7 @@ Runs in web browsers that support the HTML5 [Canvas API](https://developer.mozil
 The main goal of this project is to provide intuitive visualizations of the challenges related to data locality when programming CUDA-supported GPUs.
 As a consequence, many relevant hardware-level details have been omitted in the animations in favor of simplicity.
 
-### GPU global memory access
+## GPU global memory access
 
 One of the most significant aspects to consider when optimizing CUDA programs is the performance bottleneck caused by the memory bandwidth during data transfer between the device memory and processing units [1][2][3].
 When a thread warp requests access to global memory, the amount of memory transactions generated depends on the alignment of the data being accessed [2].
@@ -15,6 +15,8 @@ However, if the memory accesses are scattered, the GPU has to access the data us
 The image below, taken from [7], provides a clear illustration:
 
 ![Coalescing memory accesses](img/coalescing_mem_access.png "Coalescing memory accesses [7]")
+
+### Computational power vs. memory bandwidth
 
 Mei and Chu point out that while NVIDIA's GTX 980 (Maxwell architecture) has a computational power of 4612 GFlop/s, its theoretical memory bandwidth is only 224 GB/s [4].
 Furthermore, the actual memory bandwidth might be even lower [1].
