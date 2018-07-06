@@ -12,6 +12,10 @@ In the best case scenario, all 32 threads of a warp access consecutive, naturall
 In this case, all words fit neatly into one 128-byte cache line and the GPU can fetch all words using a single 128-byte memory transaction.
 However, if the memory accesses are scattered, the GPU has to access the data using multiple transactions, which reduces the memory throughput.
 
+The image below, taken from [7], provides a clear illustration:
+
+![Coalescing memory accesses](img/coalescing_mem_access.png "Coalescing memory accesses [7]")
+
 Mei and Chu point out that while NVIDIA's GTX 980 (Maxwell architecture) has a computational power of 4612 GFlop/s, its theoretical memory bandwidth is only 224 GB/s [4].
 Furthermore, the actual memory bandwidth might be even lower [1].
 It seems that this gap has only increased on NVIDIA's GTX 1080 card (Pascal architecture), which NVIDIA reports having a computational power of 8873 GFlop/s, while the theoretical memory bandwidth is limited to 320 GB/s [5].
@@ -44,3 +48,9 @@ Available [online](https://international.download.nvidia.com/geforce-com/interna
 [6] "Tesla V100 Architecture"
 NVIDIA Corporation, (August 2017).
 Available [online](https://images.nvidia.com/content/volta-architecture/pdf/volta-architecture-whitepaper.pdf)
+
+[7] Volkov Vasily
+"Understanding Latency Hiding on GPUs"
+UC Berkeley, (2016).
+ProQuest ID: Volkov_berkeley_0028E_16465. Merritt ID: ark:/13030/m5f52bdd.
+Available [online](https://escholarship.org/uc/item/1wb7f3h4)
