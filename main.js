@@ -89,7 +89,7 @@ class L2Cache {
         return i - i % this.lineSize;
     }
 
-    age() {
+    step() {
         for (let i = 0; i < this.ages.length; ++i) {
             ++this.ages[i];
         }
@@ -131,7 +131,7 @@ class L2Cache {
     // Simulate a memory access through L2, return true if the index was in the cache.
     // Also update the LRU age of the line i belongs to.
     fetch(i) {
-        this.age();
+        this.step();
         const j = this.getFromCache(i);
         if (j < 0) {
             // i was not cached, replace oldest cacheline
@@ -147,18 +147,6 @@ class L2Cache {
     // Check if device memory index i is in some of the cache lines
     isCached(i) {
         return this.cachedIndexes.has(i);
-    }
-
-    // Return a generator of all cached device memory indexes in non-empty cachelines
-    *cachedIndexes() {
-        for (const lineStart of this.lines) {
-            if (lineStart === 0) {
-                continue;
-            }
-            for (let i = 0; i < this.lineSize; ++i) {
-                yield lineStart + i - 1;
-            }
-        }
     }
 }
 
@@ -240,8 +228,7 @@ class MemorySlot extends Drawable {
     step() {
         this.draw();
         if (this.hotness > 0) {
-            --this.hotness;
-            if (this.hotness === 0) {
+            if (--this.hotness === 0) {
                 this.fillRGBA = this.defaultColor.slice();
             } else {
                 this.fillRGBA[3] -= this.coolDownStep;
@@ -367,9 +354,7 @@ function clear(canvas) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-// Throttle rendering speed to avoid choking the CPU
 var then = performance.now();
-
 var drawing = true;
 
 function draw(now) {
@@ -377,6 +362,7 @@ function draw(now) {
         window.requestAnimationFrame(draw);
     }
     if (!drawing || now - then < CONFIG.animation.drawDelayMS) {
+        // Throttle rendering speed to avoid choking the CPU
         return;
     }
     then = now;
@@ -392,10 +378,10 @@ function restart() {
 }
 
 function pause() {
-    if (!drawing) {
+    drawing = !drawing;
+    if (drawing) {
         window.requestAnimationFrame(draw);
     }
-    drawing = !drawing;
 }
 
 restart();
