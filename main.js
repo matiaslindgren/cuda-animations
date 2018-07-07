@@ -11,22 +11,25 @@ const CONFIG = {
         columnSlotCount: 32,
         // Empty space between each slot on all sides
         slotPadding: 2,
-        slotSize: 22,
+        slotSize: 23,
         slotFillRGBA: [100, 100, 100, 0.15],
         // Amount of animation steps of the cooldown transition after touching a memory index
         coolDownPeriod: 10,
+    },
+    cache: {
         // Size of a L2 cacheline in words
         L2CacheLineSize: 8,
-        L2CacheLines: 8,
+        L2CacheLines: 16,
+        cachedStateRGBA: [100, 100, 220, 0.5],
     },
     SM: {
-        count: 4,
+        count: 5,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
         paddingX: 20,
         paddingY: 20,
-        height: 100,
-        fillRGBA: [100, 100, 100, 0.3],
+        height: 135,
+        fillRGBA: [100, 100, 100, 0.1],
     },
 };
 
@@ -73,10 +76,13 @@ class L2Cache {
     constructor() {
         // Cached device memory indexes.
         // All are offset by 1, since 0 represents empty cacheline
-        this.lines = new Uint16Array(CONFIG.memory.L2CacheLines);
-        this.ages = new Uint8Array(CONFIG.memory.L2CacheLines);
+        this.lines = new Uint16Array(CONFIG.cache.L2CacheLines);
+        this.ages = new Uint8Array(CONFIG.cache.L2CacheLines);
         // Amount of words in one cacheline
-        this.lineSize = CONFIG.memory.L2CacheLineSize;
+        this.lineSize = CONFIG.cache.L2CacheLineSize;
+        // Device memory indexes currently in cache,
+        // for constant time lookup during rendering (a cache of a simulated cache...).
+        this.cachedIndexes = new Set();
     }
 
     align(i) {
@@ -94,13 +100,32 @@ class L2Cache {
         return this.lines.findIndex(cached => cached > 0 && aligned === cached);
     }
 
+    clearLine(i) {
+        // Delete all device memory indexes from lookup set for this cacheline
+        const lineStart = this.lines[i] - 1;
+        for (let j = 0; j < this.lineSize; ++j) {
+            this.cachedIndexes.delete(j + lineStart);
+        }
+    }
+
+    addLine(i, j) {
+        // Add new cacheline i with cached index j
+        this.lines[i] = j;
+        this.ages[i] = 0;
+        // Update lookup set
+        const lineStart = this.lines[i] - 1;
+        for (let j = 0; j < this.lineSize; ++j) {
+            this.cachedIndexes.add(j + lineStart);
+        }
+    }
+
     // Replace the oldest cacheline with i
     addNew(i) {
         const oldestIndex = this.lines.reduce((oldest, _, index) => {
             return this.ages[index] > this.ages[oldest] ? index : oldest;
         }, 0);
-        this.lines[oldestIndex] = this.align(i) + 1;
-        this.ages[oldestIndex] = 0;
+        this.clearLine(oldestIndex);
+        this.addLine(oldestIndex, this.align(i) + 1);
     }
 
     // Simulate a memory access through L2, return true if the index was in the cache.
@@ -117,6 +142,11 @@ class L2Cache {
             this.ages[j] = 0;
             return true;
         }
+    }
+
+    // Check if device memory index i is in some of the cache lines
+    isCached(i) {
+        return this.cachedIndexes.has(i);
     }
 
     // Return a generator of all cached device memory indexes in non-empty cachelines
@@ -164,12 +194,10 @@ class DeviceMemory extends Drawable {
     }
 
     step() {
-        for (const i of this.L2Cache.cachedIndexes()) {
-            this.slots[i].setCached(true);
-        }
-        for (const slot of this.slots) {
+        this.slots.forEach((slot, i) => {
+            slot.setCachedState(this.L2Cache.isCached(i));
             slot.step();
-        }
+        });
         super.draw();
     }
 }
@@ -182,9 +210,10 @@ class MemorySlot extends Drawable {
         this.hotness = 0;
         this.cached = false;
         // Copy default color
-        this.coolColor = this.fillRGBA.slice();
+        this.defaultColor = this.fillRGBA.slice();
         this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
-        this.coolDownStep = (1.0 - this.coolColor[3]) / this.coolDownPeriod;
+        this.coolDownStep = (1.0 - this.defaultColor[3]) / this.coolDownPeriod;
+        this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
     }
 
     // Simulate a memory access to this index
@@ -193,10 +222,18 @@ class MemorySlot extends Drawable {
         this.fillRGBA[3] = 1.0;
     }
 
-    // Update slot cache status to render it differently
-    setCached(cached) {
-        this.cached = cached;
-        this.fillRGBA[1] = (cached) ? 200 : this.coolColor[1];
+    // Update slot cache status to highlight cached slots in rendering
+    setCachedState(isCached) {
+        this.cached = isCached;
+        const newColor = (isCached ? this.cachedColor : this.defaultColor).slice();
+        // Don't update alpha if this slot is cooling down from a previous touch
+        if (this.hotness > 0 && this.fillRGBA[3] > newColor[3]) {
+            for (let i = 0; i < 3; ++i) {
+                this.fillRGBA[i] = newColor[i];
+            }
+        } else {
+            this.fillRGBA = newColor;
+        }
     }
 
     // Animation step
@@ -205,7 +242,7 @@ class MemorySlot extends Drawable {
         if (this.hotness > 0) {
             --this.hotness;
             if (this.hotness === 0) {
-                this.fillRGBA = this.coolColor.slice();
+                this.fillRGBA = this.defaultColor.slice();
             } else {
                 this.fillRGBA[3] -= this.coolDownStep;
             }
@@ -304,10 +341,8 @@ class Device {
 
     step() {
         this.memory.step();
-        if (Math.random() < 0.05) {
-            const i = Math.floor(Math.random() * 512);
-            this.memory.access(i);
-        }
+        const i = Math.floor(Math.random() * 32 * 32);
+        this.memory.access(i);
         this.multiprocessors.forEach(sm => sm.step());
     }
 }
