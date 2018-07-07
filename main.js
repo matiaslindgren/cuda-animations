@@ -1,97 +1,130 @@
 "use strict";
 
-// All globals vars
-var memoryCanvas;
-var SMCanvas;
-var memorySlots;
-var config;
+const config = {
+    // The amount of animation render frames simulating one streaming multiprocessor cycle
+    framesPerSMCycle: 120,
+    memory: {
+        // Amount of indexable memory slots on each row and column
+        rowSlotCount: 30,
+        columnSlotCount: 30,
+        // Empty space between each slot on all sides
+        slotPadding: 2,
+        slotSize: 18,
+        slotFillRGBA: [100, 100, 100, 0.2],
+        // Amount of animation steps of the cooldown transition after touching a memory index
+        coolDownPeriod: 30,
+    }
+};
 
-function init() {
-    memoryCanvas = document.getElementById("memoryCanvas");
-    SMCanvas = document.getElementById("SMCanvas");
-    memorySlots = createGrid();
-    config = {
-        // The amount of animation render frames simulating one streaming multiprocessor cycle
-        FramesPerSMCycle: 120
-        memory: {
-            rowSlotCount: 30,
-            columnSlotCount: 30,
-            slotPadding: 2,
-            slotSize: 10,
-            slotFillStyle: "#eee"
-        }
-    };
-    // config.memory.slotSize = Math.floor(Math.min(
-        // memoryCanvas.width/config.memory.rowSlotCount - config.memory.slotPadding,
-        // memoryCanvas.height/config.memory.columnSlotCount - config.memory.slotPadding
-    // ));
-
-}
-
-function clear(canvas) {
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = 'rgb(255, 255, 255)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-}
-
-function drawRects(rects, canvas) {
-    const ctx = canvas.getContext("2d");
-    rects.forEach(rect => {
-        if (typeof rect.fillStyle !== "undefined") {
-            ctx.fillStyle = rect.fillStyle;
-            ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-        }
-        if (typeof rect.strokeStyle !== "undefined") {
-            ctx.strokeStyle = rect.strokeStyle;
-            ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-        }
-    });
-}
-
-class DeviceMemory {
-    constructor() {
-        this.config = config.memory;
+class Drawable {
+    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.canvasContext = canvas.getContext("2d");
+        this.strokeRGBA = (typeof strokeRGBA === "undefined") ? null : strokeRGBA.slice();
+        this.fillRGBA = (typeof fillRGBA === "undefined") ? null : fillRGBA.slice();
     }
 
-    createGrid() {
-        const rowSlotCount = this.config.rowSlotCount;
-        const columnSlotCount = this.config.columnSlotCount;
-        const slotSize = this.config.slotSize;
-        const slotPadding = this.config.slotPadding;
-        return Array.from(
+    draw() {
+        const x = this.x;
+        const y = this.y;
+        const width = this.width;
+        const height = this.height;
+        const ctx = this.canvasContext;
+        if (this.fillRGBA !== null) {
+            ctx.fillStyle = "rgba(" + this.fillRGBA.join(',') + ')';
+            ctx.fillRect(x, y, width, height);
+        }
+        if (this.strokeRGBA !== null) {
+            ctx.strokeStyle = "rgba(" + this.strokeRGBA.join(',') + ')';
+            ctx.strokeRect(x, y, width, height);
+        }
+    }
+}
+
+class DeviceMemory extends Drawable {
+    constructor(x, y, width, height, canvas) {
+        super(x, y, width, height, canvas);
+        const rowSlotCount = config.memory.rowSlotCount;
+        const columnSlotCount = config.memory.columnSlotCount;
+        const slotSize = config.memory.slotSize;
+        const slotPadding = config.memory.slotPadding;
+        const slotFillRGBA = config.memory.slotFillRGBA;
+        this.memorySlots = Array.from(
             new Array(rowSlotCount * columnSlotCount),
             (_, i) => {
-                const x = (i % rowSlotCount) * (slotSize + slotPadding);
-                const y = Math.floor(i / rowSlotCount) * (slotSize + slotPadding);
-                return new MemorySlot(x, y, slotSize);
+                const slotX = (i % rowSlotCount) * (slotSize + slotPadding);
+                const slotY = Math.floor(i / rowSlotCount) * (slotSize + slotPadding);
+                return new MemorySlot(i, x + slotX, y + slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
             }
         );
     }
 
+    step() {
+        super.draw();
+        this.memorySlots.forEach(slot => slot.step());
+    }
 }
 
-class MemorySlot {
-    constructor(x, y, size) {
-        this.x = x;
-        this.y = y;
-        this.size = size;
-        this.fillStyle = config.memory.slotFillStyle;
+class MemorySlot extends Drawable {
+    constructor(index, ...drawableArgs) {
+        super(...drawableArgs);
+        this.index = index;
+        this.hotness = 0;
+        // Copy default color
+        this.coolColor = this.fillRGBA.slice();
+        this.coolDownPeriod = config.memory.coolDownPeriod;
+        this.coolDownStep = (1.0 - this.coolColor[3]) / this.coolDownPeriod;
     }
 
-    // Request this index in memory
+    // Simulate a memory access to this index
     touch() {
+        this.hotness = this.coolDownPeriod;
+        this.fillRGBA[3] = 1.0;
     }
 
     // Animation step
     step() {
+        this.draw();
+        if (this.hotness > 0) {
+            --this.hotness;
+            if (this.hotness === 0) {
+                this.fillRGBA = this.coolColor;
+            } else {
+                this.fillRGBA[3] -= this.coolDownStep;
+            }
+        }
     }
 
+}
+
+class Block {
 }
 
 class Thread {
 }
 
 class Warp {
+}
+
+class Instruction {
+    constructor(latency) {
+        this.latency = latency;
+    }
+
+    static arithmetic() {
+        return new Instruction(6);
+    }
+
+    static deviceMemoryAccess() {
+        return new Instruction(360);
+    }
+
+    static cachedMemoryAccess() {
+        return new Instruction(160);
+    }
 }
 
 class StreamingMultiprocessor {
@@ -108,30 +141,51 @@ class StreamingMultiprocessor {
 
     // Animation loop step
     step() {
-        if (this.frameCounter <= config.FramesPerSMCycle) {
+        if (this.frameCounter <= config.framesPerSMCycle) {
             ++this.frameCounter;
-        } else if (this.frameCounter === config.FramesPerSMCycle) {
+        } else if (this.frameCounter === config.framesPerSMCycle) {
             this.doCycle();
             this.frameCounter = 0;
         } else {
-            console.error("ERROR: inconsistent SM counter state, exceeded FramesPerSMCycle");
+            console.error("ERROR: inconsistent SM counter state, exceeded framesPerSMCycle");
         }
     }
 }
 
-function step() {
-    processor.forEach((sm, i) => {
-        sm.step();
-    });
+var memoryCanvas;
+var SMCanvas;
+var deviceMemory;
+var multiprocessors;
+
+function init() {
+    memoryCanvas = document.getElementById("memoryCanvas");
+    SMCanvas = document.getElementById("SMCanvas");
+    deviceMemory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
 }
 
+function clear(canvas) {
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+// Throttle FPS to avoid choking the CPU
+var then = performance.now();
+const drawDelayMS = 1000.0 / 30.0;
+
 function draw(now) {
+    window.requestAnimationFrame(draw);
+    if (now - then < drawDelayMS) {
+        return;
+    }
+    then = now;
     clear(memoryCanvas);
     clear(SMCanvas);
-    drawRects(slots, memoryCanvas);
-    processors.step();
-    step(memory);
-    window.requestAnimationFrame(draw);
+    deviceMemory.step();
+    if (Math.random() < 0.1) {
+        const i = Math.floor(Math.random() * deviceMemory.memorySlots.length);
+        deviceMemory.memorySlots[i].touch();
+    }
 }
 
 init();
