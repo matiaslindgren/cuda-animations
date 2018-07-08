@@ -1,14 +1,16 @@
 "use strict";
 
 function assert(expr, msg) {
-    if (!expr)
+    if (!expr) {
         console.error("ASSERTION FAILED", msg);
+        pause();
+    }
 }
 
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 30.0,
+        drawDelayMS: 1000.0 / 100.0,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
@@ -24,7 +26,7 @@ const CONFIG = {
     cache: {
         // Size of a L2 cacheline in words
         L2CacheLineSize: 8,
-        L2CacheLines: 16,
+        L2CacheLines: 32,
         cachedStateRGBA: [100, 100, 220, 0.5],
     },
     SM: {
@@ -35,12 +37,12 @@ const CONFIG = {
         framesPerSMCycle: 1,
         paddingX: 20,
         paddingY: 20,
-        height: 135,
+        height: 155,
         fillRGBA: [100, 100, 100, 0.1],
     },
     grid: {
-        dimGrid: {x: Math.round(32*32/128)},
-        dimBlock: {x: 128},
+        dimGrid: {x: Math.round(32*32/32)},
+        dimBlock: {x: 32},
     },
 };
 
@@ -165,6 +167,33 @@ class L2Cache {
     }
 }
 
+// Namespace object for kernel simulation
+class CUDAKernelContext {
+    constructor() {
+        this.locals = {};
+        this.threadIdx = {
+            x: null,
+            y: null,
+        };
+        this.blockIdx = {
+            x: null,
+            y: null,
+        };
+        this.blockDim = {
+            x: null,
+            y: null,
+        };
+        this.instruction = null;
+    }
+
+    arrayGet(memoryAccessHandle, index) {
+        // Simulate memory access
+        this.instruction = memoryAccessHandle(index);
+        // Get the actual value without simulation
+        return memoryAccessHandle(index, true);
+    }
+}
+
 class DeviceMemory extends Drawable {
     constructor(x, y, width, height, canvas) {
         super(x, y, width, height, canvas);
@@ -179,7 +208,7 @@ class DeviceMemory extends Drawable {
             (_, i) => {
                 const slotX = x + (i % rowSlotCount) * (slotSize + slotPadding);
                 const slotY = y + Math.floor(i / rowSlotCount) * (slotSize + slotPadding);
-                return new MemorySlot(i, slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
+                return new MemorySlot(i, i, slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
             }
         );
     }
@@ -207,9 +236,10 @@ class DeviceMemory extends Drawable {
 
 // One memory slot represents a single address in RAM that holds a single word
 class MemorySlot extends Drawable {
-    constructor(index, ...drawableArgs) {
+    constructor(index, value, ...drawableArgs) {
         super(...drawableArgs);
         this.index = index;
+        this.value = value;
         this.hotness = 0;
         this.cached = false;
         // Copy default color
@@ -259,7 +289,7 @@ class Grid {
         this.dimBlock = dimBlock;
         this.blocks = Array.from(
             new Array(dimGrid.x),
-            (_, i) => new Block(dimBlock)
+            (_, x) => new Block({x: x}, dimBlock)
         );
     }
 
@@ -270,10 +300,11 @@ class Grid {
 
 // Block of threads
 class Block {
-    constructor(dimBlock) {
+    constructor(blockIdx, dimBlock) {
         this.locked = false;
         this.processed = false;
         this.dim = dimBlock;
+        this.idx = blockIdx;
     }
 
     // Generator of thread warps from this block,
@@ -282,29 +313,30 @@ class Block {
         const warpSize = CONFIG.SM.warpSize;
         let warpThreads = new Array();
         for (let i = 0; i < this.dim.x; ++i) {
-            warpThreads.push(new Thread(i, memoryAccessHandle));
+            warpThreads.push(new Thread({x: i}, memoryAccessHandle));
             if (warpThreads.length === warpSize) {
-                yield new Warp(warpThreads.slice());
+                yield new Warp(this, warpThreads.slice());
                 warpThreads = new Array();
             }
         }
         if (warpThreads.length > 0) {
             // If block size is not divisible by warp size, fill warp with trailing dummy threads
             while (warpThreads.length < warpSize) {
-                warpThreads.push(new Thread(-1), _ => console.error("WARNING, -1 threads should not try to access memory"));
+                warpThreads.push(new Thread({x: -1}), _ => console.error("WARNING, -1 threads should not try to access memory"));
             }
-            yield new Warp(warpThreads.slice());
+            yield new Warp(this, warpThreads.slice());
         }
     }
 }
 
 // Simulated CUDA thread
 class Thread {
-    constructor(x, memoryAccessHandle) {
-        this.x = x;
+    constructor(threadIdx, memoryAccessHandle) {
+        this.idx = threadIdx;
         this.statement = null;
+        this.kernelContext = null;
         this.instruction = Instruction.empty();
-        this.memoryAccessHandle = memoryAccessHandle;
+        this.memoryAccessHandle = memoryAccessHandle
     }
 
     // True if this thread is ready to take a new instruction
@@ -312,16 +344,13 @@ class Thread {
         return this.instruction.isDone();
     }
 
-    access(i) {
-        return this.memoryAccessHandle(i);
-    }
-
     cycle() {
-        if (this.x < 0)
+        if (this.idx.x < 0)
             return;
         if (this.statement !== null) {
-            this.statement.forEach(expr => expr.setContext(this));
-            this.instruction = CUDAExpression.evalNested(this.statement);
+            // Evaluate kernel within the context of this thread
+            this.statement.apply(this.kernelContext, [this.memoryAccessHandle, 32]);
+            this.instruction = this.kernelContext.instruction;
             this.statement = null;
         }
         this.instruction.cycle();
@@ -330,7 +359,8 @@ class Thread {
 
 // Simulated group of CUDA threads running in an SM
 class Warp {
-    constructor(threads) {
+    constructor(block, threads) {
+        this.block = block;
         this.terminated = false;
         this.running = false;
         this.threads = threads;
@@ -345,7 +375,15 @@ class Warp {
     }
 
     nextStatement(statement) {
-        this.threads.forEach(t => t.statement = statement);
+        // Populate simulated CUDA kernel namespace
+        const warpContext = Object.assign(new CUDAKernelContext(), {
+            blockIdx: this.block.idx,
+            blockDim: this.block.dim
+        });
+        this.threads.forEach(t => {
+            t.kernelContext = Object.assign(new CUDAKernelContext(), warpContext, {threadIdx: t.idx});
+            t.statement = statement;
+        });
         ++this.programCounter;
     }
 
@@ -375,49 +413,15 @@ class Instruction {
     }
 
     static arithmetic() {
-        return new Instruction(6);
+        return new Instruction(5);
     }
 
     static cachedMemoryAccess() {
-        return new Instruction(100);
+        return new Instruction(15);
     }
 
     static deviceMemoryAccess() {
-        return new Instruction(360);
-    }
-}
-
-class CUDAExpression {
-    constructor(callable, type) {
-        this.callable = callable;
-        this.type = type;
-        this.context = null;
-    }
-
-    setContext(c) {
-        this.context = c;
-    }
-
-    eval(arg) {
-        if (this.context === null) {
-            console.error("ERROR: trying to evaluate CUDAExpression of type: " + this.type + " without context, aka 'what is this'");
-            return;
-        }
-        return this.callable.call(this.context, arg);
-    }
-
-    static evalNested(expressions) {
-        const r = expressions.reduce((result, expr) => expr.eval(result), undefined);
-        console.log("evalnested to ", r);
-        return r;
-    }
-
-    static threadIdx_x() {
-        return new CUDAExpression(function() { return this.x; }, "threadIdx.x");
-    }
-
-    static memoryAccess() {
-        return new CUDAExpression(function(i) { console.log("returning memory access from", this); return this.access(i); }, "memoryAccess");
+        return new Instruction(60);
     }
 }
 
@@ -426,6 +430,7 @@ class CycleCounter extends Drawable {
     constructor(...drawableArgs) {
         super(...drawableArgs, '0');
         this.cycles = 0;
+        this.drawableText = "cycle: 0";
     }
 
     cycle() {
@@ -462,15 +467,16 @@ class SMController {
         return true;
     }
 
-    releaseActiveBlock() {
+    releaseProcessedBlock() {
         if (this.activeBlock !== null) {
             this.activeBlock.locked = false;
+            this.activeBlock.processed = true;
             this.activeBlock = null;
         }
     }
 
     // Return a generator of all non-terminated warps
-    *runningWarps() {
+    *nonTerminatedWarps() {
         for (let warp of this.residentWarps)
             if (!warp.terminated)
                 yield warp;
@@ -478,14 +484,14 @@ class SMController {
 
     // Return a generator of all free warps, available for scheduling
     *freeWarps() {
-        for (let warp of this.runningWarps())
+        for (let warp of this.nonTerminatedWarps())
             if (warp.isActive() && !warp.running)
                 yield warp;
     }
 
     // Return a generator of all scheduled warps
     *scheduledWarps() {
-        for (let warp of this.runningWarps())
+        for (let warp of this.nonTerminatedWarps())
             if (warp.running)
                 yield warp;
     }
@@ -519,8 +525,6 @@ class SMController {
                 }
             }
         }
-        const x = Array.from(this.scheduledWarps()).length;
-        assert(x === this.schedulerCount, "invalid amount of scheduled warps " + x);
     }
 
     updateProgramCounters() {
@@ -543,14 +547,16 @@ class SMController {
     cycle() {
         this.scheduleWarps();
         this.updateProgramCounters();
-        const runningWarps = Array.from(this.runningWarps());
-        if (runningWarps.length > 0) {
+        const nonTerminatedWarps = Array.from(this.nonTerminatedWarps());
+        if (nonTerminatedWarps.length > 0) {
             // Warps available for execution
-            runningWarps.forEach(warp => warp.cycle());
+            nonTerminatedWarps.forEach(warp => warp.cycle());
         } else {
-            this.releaseActiveBlock();
+            console.log("release block");
+            this.releaseProcessedBlock();
             // All warps have terminated, try to take next block from grid
-            if (this.takeBlock()) {
+            if (!this.takeBlock()) {
+                console.log("no free blocks, terminate");
                 // No free blocks, grid fully processed
                 this.program = null;
             }
@@ -623,8 +629,14 @@ class Device {
         );
     }
 
-    accessMemory(i) {
-        return this.memory.access(i);
+    accessMemory(i, noSimulation) {
+        if (typeof noSimulation !== "undefined" && noSimulation) {
+            // Get the actual JavaScript array value
+            return this.memory.slots[i].value;
+        } else {
+            // Simulate memory access through L2Cache and return an Instruction with latency
+            return this.memory.access(i);
+        }
     }
 
     step() {
