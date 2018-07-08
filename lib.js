@@ -103,6 +103,10 @@ class L2Cache {
     clearLine(i) {
         // Delete all device memory indexes from lookup set for this cacheline
         const lineStart = this.lines[i] - 1;
+        if (lineStart < 0) {
+            // Cacheline already empty
+            return;
+        }
         for (let j = 0; j < this.lineSize; ++j) {
             this.cachedIndexes.delete(j + lineStart);
         }
