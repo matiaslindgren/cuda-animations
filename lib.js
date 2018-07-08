@@ -430,7 +430,7 @@ class CycleCounter extends Drawable {
 
     cycle() {
         ++this.cycles;
-        this.drawableText = this.cycles.toString();
+        this.drawableText = "cycle: " + this.cycles.toString();
     }
 
     step() {
@@ -502,7 +502,6 @@ class SMController {
         const activeWarpCount = Array.from(this.freeWarps()).length;
         let scheduledWarpCount = Array.from(this.scheduledWarps()).length;
         let remainingWaiting = Math.min(this.schedulerCount, activeWarpCount);
-        console.log("allwarps", this.residentWarps.length, "active", activeWarpCount, "scheduled", scheduledWarpCount, "remaining", remainingWaiting, "schedulers", this.schedulerCount);
         while (remainingWaiting-- > 0) {
             // Schedule first free warp
             for (let warp of this.freeWarps()) {
