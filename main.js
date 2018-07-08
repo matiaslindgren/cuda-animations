@@ -1,13 +1,27 @@
 "use strict";
 
+// All mutable global variables
 var memoryCanvas;
 var SMCanvas;
 var device;
+var prevRenderTime = performance.now();
+var drawing = true;
 
 function init() {
     memoryCanvas = document.getElementById("memoryCanvas");
     SMCanvas = document.getElementById("SMCanvas");
     device = new Device();
+    const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
+    const program = {
+        source: "__global__ void kernel(const float* input) {\n    input[threadIdx.x];\n}",
+        statements: [
+            [
+                CUDAExpression.threadIdx_x(),
+                CUDAExpression.memoryAccess(),
+            ],
+        ],
+    };
+    device.setProgram(grid, program);
 }
 
 function clear(canvas) {
@@ -16,18 +30,15 @@ function clear(canvas) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-var then = performance.now();
-var drawing = true;
-
 function draw(now) {
     if (drawing) {
         window.requestAnimationFrame(draw);
     }
-    if (!drawing || now - then < CONFIG.animation.drawDelayMS) {
+    if (!drawing || now - prevRenderTime < CONFIG.animation.drawDelayMS) {
         // Throttle rendering speed to avoid choking the CPU
         return;
     }
-    then = now;
+    prevRenderTime = now;
     clear(memoryCanvas);
     clear(SMCanvas);
     device.step();

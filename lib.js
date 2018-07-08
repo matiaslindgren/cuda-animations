@@ -1,5 +1,10 @@
 "use strict";
 
+function assert(expr, msg) {
+    if (!expr)
+        console.error("ASSERTION FAILED", msg);
+}
+
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
@@ -23,13 +28,19 @@ const CONFIG = {
         cachedStateRGBA: [100, 100, 220, 0.5],
     },
     SM: {
-        count: 5,
+        count: 4,
+        warpSize: 32,
+        warpSchedulers: 2,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
         paddingX: 20,
         paddingY: 20,
         height: 135,
         fillRGBA: [100, 100, 100, 0.1],
+    },
+    grid: {
+        dimGrid: {x: Math.round(32*32/128)},
+        dimBlock: {x: 128},
     },
 };
 
@@ -241,40 +252,183 @@ class MemorySlot extends Drawable {
     }
 }
 
+// Grid of blocks
+class Grid {
+    constructor(dimGrid, dimBlock) {
+        this.dimGrid = dimGrid;
+        this.dimBlock = dimBlock;
+        this.blocks = Array.from(
+            new Array(dimGrid.x),
+            (_, i) => new Block(dimBlock)
+        );
+    }
+
+    nextFreeBlockIndex() {
+        return this.blocks.findIndex(block => !block.locked && !block.processed);
+    }
+}
+
+// Block of threads
 class Block {
+    constructor(dimBlock) {
+        this.locked = false;
+        this.processed = false;
+        this.dim = dimBlock;
+    }
+
+    // Generator of thread warps from this block,
+    // takes as argument the memory access handle of the SM controller this block is being assigned to
+    *asWarps(memoryAccessHandle) {
+        const warpSize = CONFIG.SM.warpSize;
+        let warpThreads = new Array();
+        for (let i = 0; i < this.dim.x; ++i) {
+            warpThreads.push(new Thread(i, memoryAccessHandle));
+            if (warpThreads.length === warpSize) {
+                yield new Warp(warpThreads.slice());
+                warpThreads = new Array();
+            }
+        }
+        if (warpThreads.length > 0) {
+            // If block size is not divisible by warp size, fill warp with trailing dummy threads
+            while (warpThreads.length < warpSize) {
+                warpThreads.push(new Thread(-1), _ => console.error("WARNING, -1 threads should not try to access memory"));
+            }
+            yield new Warp(warpThreads.slice());
+        }
+    }
 }
 
+// Simulated CUDA thread
 class Thread {
+    constructor(x, memoryAccessHandle) {
+        this.x = x;
+        this.statement = null;
+        this.instruction = Instruction.empty();
+        this.memoryAccessHandle = memoryAccessHandle;
+    }
+
+    // True if this thread is ready to take a new instruction
+    isActive() {
+        return this.instruction.isDone();
+    }
+
+    access(i) {
+        return this.memoryAccessHandle(i);
+    }
+
+    cycle() {
+        if (this.x < 0)
+            return;
+        if (this.statement !== null) {
+            this.statement.forEach(expr => expr.setContext(this));
+            this.instruction = CUDAExpression.evalNested(this.statement);
+            this.statement = null;
+        }
+        this.instruction.cycle();
+    }
 }
 
+// Simulated group of CUDA threads running in an SM
 class Warp {
+    constructor(threads) {
+        this.terminated = false;
+        this.running = false;
+        this.threads = threads;
+        // Assuming pre-Volta architecture
+        // Since Volta, each thread has its own PC
+        this.programCounter = 0;
+    }
+
+    // An active warp is ready to execute the next instruction
+    isActive() {
+        return this.threads.every(t => t.isActive());
+    }
+
+    nextStatement(statement) {
+        this.threads.forEach(t => t.statement = statement);
+        ++this.programCounter;
+    }
+
+    cycle() {
+        this.threads.forEach(t => t.cycle());
+    }
 }
 
+// Simulated latency after an SM issued instruction
 class Instruction {
     constructor(latency) {
-        this.latency = latency;
+        this.cyclesLeft = latency;
+    }
+
+    isDone() {
+        return this.cyclesLeft === 0;
+    }
+
+    cycle() {
+        if (this.cyclesLeft > 0) {
+            --this.cyclesLeft;
+        }
+    }
+
+    static empty() {
+        return new Instruction(0);
     }
 
     static arithmetic() {
         return new Instruction(6);
     }
 
+    static cachedMemoryAccess() {
+        return new Instruction(100);
+    }
+
     static deviceMemoryAccess() {
         return new Instruction(360);
     }
+}
 
-    static cachedMemoryAccess() {
-        return new Instruction(160);
+class CUDAExpression {
+    constructor(callable, type) {
+        this.callable = callable;
+        this.type = type;
+        this.context = null;
+    }
+
+    setContext(c) {
+        this.context = c;
+    }
+
+    eval(arg) {
+        if (this.context === null) {
+            console.error("ERROR: trying to evaluate CUDAExpression of type: " + this.type + " without context, aka 'what is this'");
+            return;
+        }
+        return this.callable.call(this.context, arg);
+    }
+
+    static evalNested(expressions) {
+        const r = expressions.reduce((result, expr) => expr.eval(result), undefined);
+        console.log("evalnested to ", r);
+        return r;
+    }
+
+    static threadIdx_x() {
+        return new CUDAExpression(function() { return this.x; }, "threadIdx.x");
+    }
+
+    static memoryAccess() {
+        return new CUDAExpression(function(i) { console.log("returning memory access from", this); return this.access(i); }, "memoryAccess");
     }
 }
 
+// Drawable counter of SM cycles
 class CycleCounter extends Drawable {
     constructor(...drawableArgs) {
         super(...drawableArgs, '0');
         this.cycles = 0;
     }
 
-    doCycle() {
+    cycle() {
         ++this.cycles;
         this.drawableText = this.cycles.toString();
     }
@@ -284,42 +438,182 @@ class CycleCounter extends Drawable {
     }
 }
 
+class SMController {
+    constructor() {
+        this.schedulerCount = CONFIG.SM.warpSchedulers;
+        this.residentWarps = new Array();
+        this.grid = null;
+        this.program = null;
+        this.activeBlock = null;
+        this.memoryAccessHandle = null;
+    }
+
+    // Take next unlocked, unprocessed block from the grid
+    takeBlock() {
+        const i = this.grid.nextFreeBlockIndex();
+        if (i < 0) {
+            // No free blocks
+            return false;
+        }
+        const newBlock = this.grid.blocks[i];
+        this.activeBlock = newBlock;
+        this.activeBlock.locked = true;
+        this.residentWarps = Array.from(this.activeBlock.asWarps(this.memoryAccessHandle));
+        return true;
+    }
+
+    releaseActiveBlock() {
+        if (this.activeBlock !== null) {
+            this.activeBlock.locked = false;
+            this.activeBlock = null;
+        }
+    }
+
+    // Return a generator of all non-terminated warps
+    *runningWarps() {
+        for (let warp of this.residentWarps)
+            if (!warp.terminated)
+                yield warp;
+    }
+
+    // Return a generator of all free warps, available for scheduling
+    *freeWarps() {
+        for (let warp of this.runningWarps())
+            if (warp.isActive() && !warp.running)
+                yield warp;
+    }
+
+    // Return a generator of all scheduled warps
+    *scheduledWarps() {
+        for (let warp of this.runningWarps())
+            if (warp.running)
+                yield warp;
+    }
+
+    // Return a generator of scheduled warps waiting for their instructions to complete
+    *blockingWarps() {
+        for (let warp of this.scheduledWarps())
+            if (!warp.isActive())
+                yield warp;
+    }
+
+    // Replace warps waiting for instructions to complete with active warps
+    scheduleWarps() {
+        const activeWarpCount = Array.from(this.freeWarps()).length;
+        let scheduledWarpCount = Array.from(this.scheduledWarps()).length;
+        let remainingWaiting = Math.min(this.schedulerCount, activeWarpCount);
+        console.log("allwarps", this.residentWarps.length, "active", activeWarpCount, "scheduled", scheduledWarpCount, "remaining", remainingWaiting, "schedulers", this.schedulerCount);
+        while (remainingWaiting-- > 0) {
+            // Schedule first free warp
+            for (let warp of this.freeWarps()) {
+                // Schedule warp for execution in SM
+                warp.running = true;
+                ++scheduledWarpCount;
+                break;
+            }
+            // If too many warps are executing, remove one
+            if (scheduledWarpCount > this.schedulerCount) {
+                for (let warp of this.blockingWarps()) {
+                    warp.running = false;
+                    --scheduledWarpCount;
+                    break;
+                }
+            }
+        }
+        const x = Array.from(this.scheduledWarps()).length;
+        assert(x === this.schedulerCount, "invalid amount of scheduled warps " + x);
+    }
+
+    updateProgramCounters() {
+        for (let warp of this.scheduledWarps()) {
+            if (!warp.isActive()) {
+                // Warp is waiting for instructions to complete.
+                // This situation may happen if all resident warps are waiting
+                continue;
+            }
+            const warpPC = warp.programCounter;
+            const statements = this.program.statements;
+            if (warpPC < statements.length) {
+                warp.nextStatement(statements[warpPC]);
+            } else {
+                warp.terminated = true;
+            }
+        }
+    }
+
+    cycle() {
+        this.scheduleWarps();
+        this.updateProgramCounters();
+        const runningWarps = Array.from(this.runningWarps());
+        if (runningWarps.length > 0) {
+            // Warps available for execution
+            runningWarps.forEach(warp => warp.cycle());
+        } else {
+            this.releaseActiveBlock();
+            // All warps have terminated, try to take next block from grid
+            if (this.takeBlock()) {
+                // No free blocks, grid fully processed
+                this.program = null;
+            }
+        }
+    }
+}
+
 class StreamingMultiprocessor extends Drawable {
     constructor(...drawableArgs) {
         super(...drawableArgs);
         this.frameCounter = 0;
-        this.cycleCounter = new CycleCounter(...drawableArgs);
-        this.warps = [];
+        this.cycleLabel = new CycleCounter(...drawableArgs);
         this.framesPerCycle = CONFIG.SM.framesPerSMCycle;
-        this.scheduler = null;
+        assert(this.framesPerCycle > 0, "frames per SM cycle must be at least 1");
+        this.controller = new SMController();
+    }
+
+    // Simulate one processor cycle
+    cycle() {
+        this.frameCounter = 0;
+        if (this.controller.program !== null) {
+            this.cycleLabel.cycle();
+            this.controller.cycle();
+        }
     }
 
     // Animation loop step
     step() {
         super.draw();
-        this.cycleCounter.step();
+        this.cycleLabel.step();
         if (Math.random() < 0.15) {
             // Simulated latency within this SM for the duration of a single animation frame
             return;
         }
-        if (this.frameCounter < this.framesPerCycle) {
-            ++this.frameCounter;
-            if (this.frameCounter === this.framesPerCycle) {
-                // Simulate one processor cycle
-                this.cycleCounter.doCycle();
-                this.frameCounter = 0;
-            }
-        } else {
-            console.error("ERROR: inconsistent SM counter state, exceeded framesPerSMCycle");
+        if (++this.frameCounter === this.framesPerCycle) {
+            this.cycle();
         }
     }
 }
 
+// Wrapper around the device memory and multiprocessors, simulating memory access handling and scheduling
 class Device {
     constructor() {
         this.memory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
-        this.multiprocessors = Array.from(
-            new Array(CONFIG.SM.count),
+        this.multiprocessors = this.createProcessors(CONFIG.SM.count);
+    }
+
+    // Initialize all processors
+    setProgram(grid, program) {
+        const memoryAccessHandle = this.accessMemory.bind(this);
+        this.multiprocessors.forEach(sm => {
+            assert(sm.controller.program === null, "sm controllers should not be reset while they are running a program");
+            sm.controller.memoryAccessHandle = memoryAccessHandle;
+            sm.controller.program = program;
+            sm.controller.grid = grid;
+            sm.controller.takeBlock();
+        });
+    }
+
+    createProcessors(count) {
+        return Array.from(
+            new Array(count),
             (_, i) => {
                 const x = CONFIG.SM.paddingX;
                 const y = i * CONFIG.SM.height + (i + 1) * CONFIG.SM.paddingY;
@@ -330,10 +624,12 @@ class Device {
         );
     }
 
+    accessMemory(i) {
+        return this.memory.access(i);
+    }
+
     step() {
         this.memory.step();
-        const i = Math.floor(Math.random() * 32 * 32);
-        this.memory.access(i);
         this.multiprocessors.forEach(sm => sm.step());
     }
 }
