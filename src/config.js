@@ -16,6 +16,8 @@ const CONFIG = {
         // Delay in ms between rendering each frame
         drawDelayMS: 1000.0 / 100.0,
         SMCycleLabelSize: 20,
+        kernelSourceTextSize: 16,
+        kernelSourceTextHeight: 22,
     },
     latencies: {
         arithmetic: 10,

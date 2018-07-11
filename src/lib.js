@@ -576,10 +576,13 @@ class Device {
     constructor() {
         this.memory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
         this.multiprocessors = this.createProcessors(CONFIG.SM.count);
+        this.kernelSource = null;
     }
 
     // Initialize all processors
     setProgram(grid, program) {
+        this.kernelSource = new KernelSource(program.sourceLines);
+        this.kernelSource.draw();
         const memoryAccessHandle = this.accessMemory.bind(this);
         this.multiprocessors.forEach(sm => {
             assert(sm.controller.program === null, "sm controllers should not be reset while they are running a program");
@@ -616,5 +619,18 @@ class Device {
     step() {
         this.memory.step();
         this.multiprocessors.forEach(sm => sm.step());
+    }
+}
+
+class KernelSource {
+    constructor(sourceLines) {
+        const sourceHeight = CONFIG.animation.kernelSourceTextHeight;
+        this.drawableLines = Array.from(sourceLines, (line, lineno) => {
+            return new Drawable(0, lineno * sourceHeight, undefined, undefined, kernelCanvas, undefined, undefined, line, CONFIG.animation.kernelSourceTextSize);
+        });
+    }
+
+    draw() {
+        this.drawableLines.forEach(line => line.draw());
     }
 }
