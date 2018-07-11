@@ -14,15 +14,15 @@ function printobj(o) {
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 30.0,
+        drawDelayMS: 1000.0 / 220.0,
         SMCycleLabelSize: 20,
         kernelSourceTextSize: 16,
         kernelSourceTextHeight: 22,
     },
     latencies: {
         arithmetic: 10,
-        L2CacheAccess: 30,
-        memoryAccess: 60,
+        L2CacheAccess: 25,
+        memoryAccess: 100,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
@@ -46,7 +46,7 @@ const CONFIG = {
         warpSize: 32,
         warpSchedulers: 2,
         // The amount of animation render frames simulating one multiprocessor cycle
-        framesPerSMCycle: 3,
+        framesPerSMCycle: 1,
         paddingX: 20,
         paddingY: 20,
         height: 155,

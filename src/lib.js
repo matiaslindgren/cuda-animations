@@ -117,7 +117,6 @@ class L2Cache {
     // Simulate a memory access through L2, return true if the index was in the cache.
     // Also update the LRU age of the line i belongs to.
     fetch(i) {
-        this.step();
         let fetchInstruction;
         const j = this.getCachedIndex(i);
         if (j < 0) {
@@ -197,6 +196,7 @@ class DeviceMemory extends Drawable {
     }
 
     step() {
+        this.L2Cache.step();
         this.slots.forEach((slot, i) => {
             slot.setCachedState(this.L2Cache.isCached(i));
             slot.step();
@@ -561,7 +561,7 @@ class StreamingMultiprocessor extends Drawable {
     step() {
         super.draw();
         this.cycleLabel.step();
-        if (Math.random() < 0.15) {
+        if (Math.random() < 0.1) {
             // Simulated latency within this SM for the duration of a single animation frame
             return;
         }

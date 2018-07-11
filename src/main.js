@@ -12,7 +12,10 @@ const kernelSourceLines = [
     "__global__ void kernel(const float* input) {",
     "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
     "    const float x = input[i];",
-    "    const float xx = x * x;",
+    "    float a = x * x;",
+    "    float b = 2.0 * a;",
+    "    float c = a * b + x;",
+    "    float d = a + b + c;",
     "}",
 ];
 const kernelCallableStatements = [
@@ -25,7 +28,19 @@ const kernelCallableStatements = [
     },
     function(input, n) {
         this.arithmetic();
-        this.locals.xx = this.locals.x * this.locals.x;
+        this.locals.a = this.locals.x * this.locals.x;
+    },
+    function(input, n) {
+        this.arithmetic();
+        this.locals.b = 2.0 * this.locals.a;
+    },
+    function(input, n) {
+        this.arithmetic();
+        this.locals.c = this.locals.a * this.locals.b + this.locals.x;
+    },
+    function(input, n) {
+        this.arithmetic();
+        this.locals.d = this.locals.a + this.locals.b + this.locals.c;
     },
 ];
 
