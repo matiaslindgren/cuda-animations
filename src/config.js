@@ -14,7 +14,7 @@ function printobj(o) {
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 100.0,
+        drawDelayMS: 1000.0 / 30.0,
         SMCycleLabelSize: 20,
         kernelSourceTextSize: 16,
         kernelSourceTextHeight: 22,
@@ -46,7 +46,7 @@ const CONFIG = {
         warpSize: 32,
         warpSchedulers: 2,
         // The amount of animation render frames simulating one multiprocessor cycle
-        framesPerSMCycle: 1,
+        framesPerSMCycle: 3,
         paddingX: 20,
         paddingY: 20,
         height: 155,

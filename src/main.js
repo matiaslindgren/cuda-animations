@@ -59,6 +59,7 @@ function draw(now) {
     prevRenderTime = now;
     clear(memoryCanvas);
     clear(SMCanvas);
+    clear(kernelCanvas);
     device.step();
 }
 

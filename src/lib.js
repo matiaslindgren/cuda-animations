@@ -34,10 +34,10 @@ class Drawable {
             ctx.strokeRect(x, y, width, height);
         }
         if (this.drawableText !== null) {
-            const fontsize = this.fontSize;
-            ctx.font = fontsize + "px monospace";
+            const fontSize = this.fontSize;
+            ctx.font = fontSize + "px monospace";
             ctx.fillStyle = "rgba(0, 0, 0, 1)";
-            ctx.fillText(this.drawableText, x + fontsize, y + fontsize);
+            ctx.fillText(this.drawableText, x, y + fontSize);
         }
     }
 }
@@ -579,10 +579,9 @@ class Device {
         this.kernelSource = null;
     }
 
-    // Initialize all processors
+    // Initialize all processors with new program
     setProgram(grid, program) {
         this.kernelSource = new KernelSource(program.sourceLines);
-        this.kernelSource.draw();
         const memoryAccessHandle = this.accessMemory.bind(this);
         this.multiprocessors.forEach(sm => {
             assert(sm.controller.program === null, "sm controllers should not be reset while they are running a program");
@@ -618,19 +617,77 @@ class Device {
 
     step() {
         this.memory.step();
-        this.multiprocessors.forEach(sm => sm.step());
+        this.multiprocessors.forEach((sm, smIndex) => {
+            sm.step();
+            sm.controller.residentWarps.forEach((warp, warpIndex) => {
+                const colorIndex = {x: warpIndex, y: smIndex};
+                const lineno = warp.programCounter;
+                this.kernelSource.setHighlight(colorIndex, lineno, true);
+            });
+        });
+        this.kernelSource.step();
     }
 }
 
 class KernelSource {
     constructor(sourceLines) {
         const sourceHeight = CONFIG.animation.kernelSourceTextHeight;
+        const palette = [
+            [
+                [50, 50, 180, 0.15],
+                [50, 50, 220, 0.15],
+            ],
+            [
+                [50, 180, 50, 0.15],
+                [50, 220, 50, 0.15],
+            ],
+        ];
         this.drawableLines = Array.from(sourceLines, (line, lineno) => {
-            return new Drawable(0, lineno * sourceHeight, undefined, undefined, kernelCanvas, undefined, undefined, line, CONFIG.animation.kernelSourceTextSize);
+            const _ = undefined;
+            const x = 0;
+            const y = lineno * sourceHeight;
+            const textDrawable = new Drawable(x, y, _, _, kernelCanvas, _, _, line, CONFIG.animation.kernelSourceTextSize);
+            const width = kernelCanvas.width;
+            const height = sourceHeight;
+            return {
+                text: textDrawable,
+                highlights: Array.from(palette, shades => {
+                    return Array.from(shades, highlightColor => {
+                        const hlDrawable = new Drawable(x, y, width, height, kernelCanvas, _, highlightColor);
+                        return {
+                            drawable: hlDrawable,
+                            on: false,
+                        };
+                    });
+                }),
+            };
         });
     }
 
-    draw() {
-        this.drawableLines.forEach(line => line.draw());
+    setHighlight(colorIndex, lineno, on) {
+        this.drawableLines[lineno].highlights[colorIndex.y][colorIndex.x].on = on;
+    }
+
+    drawSourceLines() {
+        this.drawableLines.forEach(line => line.text.draw());
+    }
+
+    drawHighlighted() {
+        this.drawableLines.forEach(line => {
+            line.highlights.forEach(shades => {
+                shades.forEach(hl => {
+                    if (hl.on) {
+                        hl.drawable.draw();
+                    }
+                    hl.on = false;
+                });
+            });
+        });
+    }
+
+    step() {
+        // TODO: text drawing on each step is suboptimal, use highlighting layers
+        this.drawSourceLines();
+        this.drawHighlighted();
     }
 }
