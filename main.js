@@ -14,16 +14,14 @@ function init() {
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
     const program = {
         source: "__global__ void kernel(const float* input) {\n    input[threadIdx.x];\n}",
-        statements: [
-            function(input, n) {
+        statements: Array.from(
+            new Array(1),
+            _ => { return function(input, n) {
                 this.locals.i = this.threadIdx.x + this.blockIdx.x * this.blockDim.x;
                 this.locals.x = this.arrayGet(input, this.locals.i);
-            },
-            function(input, n) {
-                this.locals.i = this.threadIdx.x + this.blockIdx.x * this.blockDim.x;
-                this.locals.x = this.arrayGet(input, this.locals.i);
-            },
-        ],
+            };
+            }
+        ),
     };
     device.setProgram(grid, program);
 }

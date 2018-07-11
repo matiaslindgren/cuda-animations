@@ -12,6 +12,11 @@ const CONFIG = {
         // Delay in ms between rendering each frame
         drawDelayMS: 1000.0 / 100.0,
     },
+    latencies: {
+        arithmetic: 5,
+        L2CacheAccess: 10,
+        memoryAccess: 20,
+    },
     memory: {
         // Amount of indexable memory slots on each row and column
         rowSlotCount: 32,
@@ -26,23 +31,23 @@ const CONFIG = {
     cache: {
         // Size of a L2 cacheline in words
         L2CacheLineSize: 8,
-        L2CacheLines: 32,
+        L2CacheLines: 16,
         cachedStateRGBA: [100, 100, 220, 0.5],
     },
     SM: {
-        count: 4,
+        count: 2,
         warpSize: 32,
         warpSchedulers: 2,
         // The amount of animation render frames simulating one multiprocessor cycle
-        framesPerSMCycle: 1,
+        framesPerSMCycle: 5,
         paddingX: 20,
         paddingY: 20,
         height: 155,
         fillRGBA: [100, 100, 100, 0.1],
     },
     grid: {
-        dimGrid: {x: Math.round(32*32/32)},
-        dimBlock: {x: 32},
+        dimGrid: {x: Math.round(32*32/64)},
+        dimBlock: {x: 64},
     },
 };
 
@@ -93,9 +98,8 @@ class L2Cache {
         this.ages = new Uint8Array(CONFIG.cache.L2CacheLines);
         // Amount of words in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
-        // Device memory indexes currently in cache,
-        // for constant time lookup during rendering (a cache of a simulated cache...).
-        this.cachedIndexes = new Set();
+        // Device memory access instructions waiting to return
+        this.memoryAccessQueue = new Array();
     }
 
     align(i) {
@@ -103,37 +107,37 @@ class L2Cache {
     }
 
     step() {
+        // Age all cache lines
         for (let i = 0; i < this.ages.length; ++i) {
             ++this.ages[i];
         }
+        // Add all completed memory fetches as cache lines
+        this.memoryAccessQueue.forEach(instruction => {
+            if (instruction.isDone()) {
+                const memoryIndex = instruction.data.index;
+                const lineIndex = this.getCachedIndex(memoryIndex);
+                if (lineIndex < 0) {
+                    this.addNew(memoryIndex);
+                } else {
+                    this.ages[lineIndex] = 0;
+                }
+            }
+        })
+        // Delete all completed memory access instructions
+        this.memoryAccessQueue = this.memoryAccessQueue.filter(instruction => {
+            return !instruction.isDone();
+        });
     }
 
-    getFromCache(i) {
+    getCachedIndex(i) {
         const aligned = this.align(i) + 1;
         return this.lines.findIndex(cached => cached > 0 && aligned === cached);
     }
 
-    clearLine(i) {
-        // Delete all device memory indexes from lookup set for this cacheline
-        const lineStart = this.lines[i] - 1;
-        if (lineStart < 0) {
-            // Cacheline already empty
-            return;
-        }
-        for (let j = 0; j < this.lineSize; ++j) {
-            this.cachedIndexes.delete(j + lineStart);
-        }
-    }
-
     addLine(i, j) {
         // Add new cacheline i with cached index j
-        this.lines[i] = j;
+        this.lines[i] = this.align(j) + 1;
         this.ages[i] = 0;
-        // Update lookup set
-        const lineStart = this.lines[i] - 1;
-        for (let j = 0; j < this.lineSize; ++j) {
-            this.cachedIndexes.add(j + lineStart);
-        }
     }
 
     // Replace the oldest cacheline with i
@@ -141,29 +145,41 @@ class L2Cache {
         const oldestIndex = this.lines.reduce((oldest, _, index) => {
             return this.ages[index] > this.ages[oldest] ? index : oldest;
         }, 0);
-        this.clearLine(oldestIndex);
-        this.addLine(oldestIndex, this.align(i) + 1);
+        this.addLine(oldestIndex, i);
+    }
+
+    queueMemoryAccess(i) {
+        let instruction = this.memoryAccessQueue.find(instr => instr.data.index === i);
+        if (typeof instruction !== "undefined") {
+            // Memory access at index i already queued
+            return instruction;
+        }
+        // Create new instruction to access memory at index i
+        instruction = Instruction.deviceMemoryAccess(i);
+        this.memoryAccessQueue.push(instruction);
+        return instruction;
     }
 
     // Simulate a memory access through L2, return true if the index was in the cache.
     // Also update the LRU age of the line i belongs to.
     fetch(i) {
         this.step();
-        const j = this.getFromCache(i);
+        let fetchInstruction;
+        const j = this.getCachedIndex(i);
         if (j < 0) {
-            // i was not cached, replace oldest cacheline
-            this.addNew(i);
-            return false;
+            // i was not cached, queue fetch from memory
+            fetchInstruction = this.queueMemoryAccess(i);
         } else {
             // i was cached, set age of i's cacheline to zero
             this.ages[j] = 0;
-            return true;
+            fetchInstruction = Instruction.cachedMemoryAccess();
         }
+        return fetchInstruction;
     }
 
     // Check if device memory index i is in some of the cache lines
     isCached(i) {
-        return this.cachedIndexes.has(i);
+        return this.getCachedIndex(i) >= 0;
     }
 }
 
@@ -216,13 +232,7 @@ class DeviceMemory extends Drawable {
     // Simulate a memory access to index i in the global memory
     access(i) {
         this.slots[i].touch();
-        if (this.L2Cache.fetch(i)) {
-            // i was in a cacheline
-            return Instruction.cachedMemoryAccess();
-        } else {
-            // i was not in a cacheline
-            return Instruction.deviceMemoryAccess();
-        }
+        return this.L2Cache.fetch(i);
     }
 
     step() {
@@ -241,7 +251,6 @@ class MemorySlot extends Drawable {
         this.index = index;
         this.value = value;
         this.hotness = 0;
-        this.cached = false;
         // Copy default color
         this.defaultColor = this.fillRGBA.slice();
         this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
@@ -257,7 +266,6 @@ class MemorySlot extends Drawable {
 
     // Update slot cache status to highlight cached slots in rendering
     setCachedState(isCached) {
-        this.cached = isCached;
         const newColor = (isCached ? this.cachedColor : this.defaultColor).slice();
         // Don't update alpha if this slot is cooling down from a previous touch
         if (this.hotness > 0 && this.fillRGBA[3] > newColor[3]) {
@@ -396,6 +404,7 @@ class Warp {
 class Instruction {
     constructor(latency) {
         this.cyclesLeft = latency;
+        this.data = {};
     }
 
     isDone() {
@@ -413,15 +422,17 @@ class Instruction {
     }
 
     static arithmetic() {
-        return new Instruction(5);
+        return new Instruction(CONFIG.latencies.arithmetic);
     }
 
     static cachedMemoryAccess() {
-        return new Instruction(15);
+        return new Instruction(CONFIG.latencies.L2CacheAccess);
     }
 
-    static deviceMemoryAccess() {
-        return new Instruction(60);
+    static deviceMemoryAccess(i) {
+        const instr = new Instruction(CONFIG.latencies.memoryAccess);
+        instr.data = {index: i};
+        return instr;
     }
 }
 
@@ -552,11 +563,9 @@ class SMController {
             // Warps available for execution
             nonTerminatedWarps.forEach(warp => warp.cycle());
         } else {
-            console.log("release block");
             this.releaseProcessedBlock();
             // All warps have terminated, try to take next block from grid
             if (!this.takeBlock()) {
-                console.log("no free blocks, terminate");
                 // No free blocks, grid fully processed
                 this.program = null;
             }
