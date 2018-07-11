@@ -10,6 +10,11 @@
     left: 850px;
 }
 
+#KernelSourceCanvasContainer {
+    left: 850px;
+    top: 450px;
+}
+
 canvas {
     margin-bottom: 5px;
 }

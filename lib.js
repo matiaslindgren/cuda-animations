@@ -1,58 +1,7 @@
 "use strict";
 
-function assert(expr, msg) {
-    if (!expr) {
-        console.error("ASSERTION FAILED", msg);
-        pause();
-    }
-}
-
-const CONFIG = {
-    animation: {
-        // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 100.0,
-    },
-    latencies: {
-        arithmetic: 5,
-        L2CacheAccess: 10,
-        memoryAccess: 20,
-    },
-    memory: {
-        // Amount of indexable memory slots on each row and column
-        rowSlotCount: 32,
-        columnSlotCount: 32,
-        // Empty space between each slot on all sides
-        slotPadding: 2,
-        slotSize: 23,
-        slotFillRGBA: [100, 100, 100, 0.15],
-        // Amount of animation steps of the cooldown transition after touching a memory index
-        coolDownPeriod: 10,
-    },
-    cache: {
-        // Size of a L2 cacheline in words
-        L2CacheLineSize: 8,
-        L2CacheLines: 16,
-        cachedStateRGBA: [100, 100, 220, 0.5],
-    },
-    SM: {
-        count: 2,
-        warpSize: 32,
-        warpSchedulers: 2,
-        // The amount of animation render frames simulating one multiprocessor cycle
-        framesPerSMCycle: 5,
-        paddingX: 20,
-        paddingY: 20,
-        height: 155,
-        fillRGBA: [100, 100, 100, 0.1],
-    },
-    grid: {
-        dimGrid: {x: Math.round(32*32/64)},
-        dimBlock: {x: 64},
-    },
-};
-
 class Drawable {
-    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA, text) {
+    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA, text, fontSize) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -62,7 +11,12 @@ class Drawable {
         this.strokeRGBA = (typeof strokeRGBA === "undefined") ? null : strokeRGBA.slice();
         this.fillRGBA = (typeof fillRGBA === "undefined") ? null : fillRGBA.slice();
         // If text is given, this drawable renders text
-        this.drawableText = (typeof text === "undefined") ? null : text;
+        if (typeof text !== "undefined") {
+            this.drawableText = text;
+            this.fontSize = fontSize;
+        } else {
+            this.drawableText = null;
+        }
     }
 
     draw() {
@@ -80,7 +34,7 @@ class Drawable {
             ctx.strokeRect(x, y, width, height);
         }
         if (this.drawableText !== null) {
-            const fontsize = 25;
+            const fontsize = this.fontSize;
             ctx.font = fontsize + "px monospace";
             ctx.fillStyle = "rgba(0, 0, 0, 1)";
             ctx.fillText(this.drawableText, x + fontsize, y + fontsize);
@@ -199,12 +153,19 @@ class CUDAKernelContext {
             x: null,
             y: null,
         };
-        this.instruction = null;
+        this.prevInstruction = null;
     }
 
+    // Simulated arithmetic instruction
+    arithmetic() {
+        // Create latency
+        this.prevInstruction = Instruction.arithmetic();
+    }
+
+    // Simulated random access memory transaction
     arrayGet(memoryAccessHandle, index) {
         // Simulate memory access
-        this.instruction = memoryAccessHandle(index);
+        this.prevInstruction = memoryAccessHandle(index);
         // Get the actual value without simulation
         return memoryAccessHandle(index, true);
     }
@@ -224,7 +185,7 @@ class DeviceMemory extends Drawable {
             (_, i) => {
                 const slotX = x + (i % rowSlotCount) * (slotSize + slotPadding);
                 const slotY = y + Math.floor(i / rowSlotCount) * (slotSize + slotPadding);
-                return new MemorySlot(i, i, slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
+                return new MemorySlot(i, 2, slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
             }
         );
     }
@@ -319,20 +280,13 @@ class Block {
     // takes as argument the memory access handle of the SM controller this block is being assigned to
     *asWarps(memoryAccessHandle) {
         const warpSize = CONFIG.SM.warpSize;
-        let warpThreads = new Array();
-        for (let i = 0; i < this.dim.x; ++i) {
-            warpThreads.push(new Thread({x: i}, memoryAccessHandle));
-            if (warpThreads.length === warpSize) {
-                yield new Warp(this, warpThreads.slice());
-                warpThreads = new Array();
-            }
+        if (this.dim.x % warpSize !== 0) {
+            console.error("Uneven block size, unable to divide block evenly into warps");
+            return;
         }
-        if (warpThreads.length > 0) {
-            // If block size is not divisible by warp size, fill warp with trailing dummy threads
-            while (warpThreads.length < warpSize) {
-                warpThreads.push(new Thread({x: -1}), _ => console.error("WARNING, -1 threads should not try to access memory"));
-            }
-            yield new Warp(this, warpThreads.slice());
+        for (let w = 0; w < this.dim.x / warpSize; ++w) {
+            const threadIndexes = Array.from(new Array(warpSize), (_, i) => w * warpSize + i);
+            yield new Warp(this, threadIndexes, memoryAccessHandle);
         }
     }
 }
@@ -353,27 +307,30 @@ class Thread {
     }
 
     cycle() {
-        if (this.idx.x < 0)
+        if (this.idx.x < 0) {
+            // Masked thread, do nothing
             return;
-        if (this.statement !== null) {
-            // Evaluate kernel within the context of this thread
-            this.statement.apply(this.kernelContext, [this.memoryAccessHandle, 32]);
-            this.instruction = this.kernelContext.instruction;
-            this.statement = null;
         }
-        this.instruction.cycle();
+        if (this.statement !== null) {
+            // Create new instruction from queued statement
+            this.statement.apply(this.kernelContext, [this.memoryAccessHandle, 0]);
+            this.instruction = this.kernelContext.prevInstruction;
+            this.statement = null;
+        } else {
+            // Continue waiting for instruction to complete
+            this.instruction.cycle();
+        }
     }
 }
 
 // Simulated group of CUDA threads running in an SM
 class Warp {
-    constructor(block, threads) {
-        this.block = block;
+    constructor(block, threadIndexes, memoryAccessHandle) {
         this.terminated = false;
         this.running = false;
-        this.threads = threads;
-        // Assuming pre-Volta architecture
-        // Since Volta, each thread has its own PC
+        this.threads = Array.from(threadIndexes, i => new Thread({x: i}, memoryAccessHandle));
+        this.initCUDAKernelContext(block);
+        // Assuming pre-Volta architecture, with program counters for each warp but not yet for each thread
         this.programCounter = 0;
     }
 
@@ -382,19 +339,26 @@ class Warp {
         return this.threads.every(t => t.isActive());
     }
 
-    nextStatement(statement) {
-        // Populate simulated CUDA kernel namespace
-        const warpContext = Object.assign(new CUDAKernelContext(), {
-            blockIdx: this.block.idx,
-            blockDim: this.block.dim
-        });
+    // Set threadIdx, blockIdx etc. namespace for simulated CUDA kernel
+    initCUDAKernelContext(block) {
+        // Populate simulated CUDA kernel namespace for each thread
+        const warpContext = {
+            blockIdx: block.idx,
+            blockDim: block.dim
+        };
         this.threads.forEach(t => {
-            t.kernelContext = Object.assign(new CUDAKernelContext(), warpContext, {threadIdx: t.idx});
-            t.statement = statement;
+            const threadContext = { threadIdx: t.idx };
+            t.kernelContext = Object.assign(new CUDAKernelContext(), warpContext, threadContext);
         });
+    }
+
+    // Add a new statement/instruction to be executed by all threads in the warp
+    nextStatement(statement) {
+        this.threads.forEach(t => t.statement = statement);
         ++this.programCounter;
     }
 
+    // All threads in a warp do one cycle in parallel
     cycle() {
         this.threads.forEach(t => t.cycle());
     }
@@ -402,7 +366,8 @@ class Warp {
 
 // Simulated latency after an SM issued instruction
 class Instruction {
-    constructor(latency) {
+    constructor(name, latency) {
+        this.name = name;
         this.cyclesLeft = latency;
         this.data = {};
     }
@@ -418,19 +383,19 @@ class Instruction {
     }
 
     static empty() {
-        return new Instruction(0);
+        return new Instruction("empty", 0);
     }
 
     static arithmetic() {
-        return new Instruction(CONFIG.latencies.arithmetic);
+        return new Instruction("arithmetic", CONFIG.latencies.arithmetic);
     }
 
     static cachedMemoryAccess() {
-        return new Instruction(CONFIG.latencies.L2CacheAccess);
+        return new Instruction("cachedMemoryAccess", CONFIG.latencies.L2CacheAccess);
     }
 
     static deviceMemoryAccess(i) {
-        const instr = new Instruction(CONFIG.latencies.memoryAccess);
+        const instr = new Instruction("deviceMemoryAccess", CONFIG.latencies.memoryAccess);
         instr.data = {index: i};
         return instr;
     }
@@ -439,7 +404,7 @@ class Instruction {
 // Drawable counter of SM cycles
 class CycleCounter extends Drawable {
     constructor(...drawableArgs) {
-        super(...drawableArgs, '0');
+        super(...drawableArgs, '', CONFIG.animation.SMCycleLabelSize);
         this.cycles = 0;
         this.drawableText = "cycle: 0";
     }
@@ -464,8 +429,8 @@ class SMController {
         this.memoryAccessHandle = null;
     }
 
-    // Take next unlocked, unprocessed block from the grid
-    takeBlock() {
+    // Free all resident warps and take next available block from the grid
+    scheduleNextBlock() {
         const i = this.grid.nextFreeBlockIndex();
         if (i < 0) {
             // No free blocks
@@ -563,10 +528,10 @@ class SMController {
             // Warps available for execution
             nonTerminatedWarps.forEach(warp => warp.cycle());
         } else {
-            this.releaseProcessedBlock();
             // All warps have terminated, try to take next block from grid
-            if (!this.takeBlock()) {
-                // No free blocks, grid fully processed
+            this.releaseProcessedBlock();
+            const hasWork = this.scheduleNextBlock();
+            if (!hasWork) {
                 this.program = null;
             }
         }
@@ -621,7 +586,7 @@ class Device {
             sm.controller.memoryAccessHandle = memoryAccessHandle;
             sm.controller.program = program;
             sm.controller.grid = grid;
-            sm.controller.takeBlock();
+            sm.controller.scheduleNextBlock();
         });
     }
 
