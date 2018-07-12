@@ -429,13 +429,14 @@ class Instruction {
 }
 
 class CycleCounter {
-    constructor(id) {
-        this.targetElement = document.getElementById("sm-state-" + id);
+    constructor(stateElement) {
+        this.targetElement = stateElement.querySelector("li pre span.sm-cycle-counter");
         this.cycles = 0;
     }
 
     cycle() {
         ++this.cycles;
+        this.targetElement.innerHTML = this.cycles.toString();
     }
 }
 
@@ -560,9 +561,9 @@ class SMController {
 
 class StreamingMultiprocessor {
     constructor(id) {
-        this.id = id;
         this.frameCounter = 0;
-        this.cycleLabel = new CycleCounter(id);
+        const stateElement = document.getElementById("sm-state-" + id);
+        this.cycleCounter = new CycleCounter(stateElement);
         this.framesPerCycle = CONFIG.SM.framesPerSMCycle;
         assert(this.framesPerCycle > 0, "frames per SM cycle must be at least 1");
         this.controller = new SMController();
@@ -572,15 +573,13 @@ class StreamingMultiprocessor {
     cycle() {
         this.frameCounter = 0;
         if (this.controller.program !== null) {
-            //this.cycleLabel.cycle();
+            this.cycleCounter.cycle();
             this.controller.cycle();
         }
     }
 
     // Animation loop step
     step() {
-        //super.draw();
-        //this.cycleLabel.step();
         if (Math.random() < 0.1) {
             // Simulated latency within this SM for the duration of a single animation frame
             return;
@@ -617,7 +616,7 @@ class Device {
     }
 
     createProcessors(count) {
-        return Array.from(new Array(count), (_, i) => new StreamingMultiprocessor(i));
+        return Array.from(new Array(count), (_, i) => new StreamingMultiprocessor(i + 1));
     }
 
     accessMemory(i, noSimulation) {
