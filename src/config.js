@@ -16,8 +16,6 @@ const CONFIG = {
         // Delay in ms between rendering each frame
         drawDelayMS: 1000.0 / 420.0,
         SMCycleLabelSize: 20,
-        kernelSourceTextSize: 16,
-        kernelSourceTextHeight: 22,
         kernelHighlightPalette: [
             [[150, 50, 50, 0.15],
              [200, 50, 50, 0.15],
@@ -62,7 +60,7 @@ const CONFIG = {
         paddingX: 20,
         paddingY: 20,
         height: 105,
-        fillRGBA: [100, 100, 100, 0.1],
+        colorRGBA: [100, 100, 100, 0.8],
     },
     grid: {
         dimGrid: {x: Math.round(32*32/64)},

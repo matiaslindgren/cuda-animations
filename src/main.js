@@ -44,25 +44,51 @@ const kernelCallableStatements = [
     },
 ];
 
-function parseStylePX(style, prop) {
-    return parseInt(style.getPropertyValue(prop).split("px")[0]);
+function parseStyle(style, prop, unit) {
+    if (typeof unit === "undefined") {
+        unit = "px";
+    }
+    return parseFloat(style.getPropertyValue(prop).split(unit)[0]);
+}
+
+function resetSizeAttrsFromStyle(element) {
+    const style = window.getComputedStyle(element, null);
+    element.width = parseStyle(style, "width");
+    element.height = parseStyle(style, "height");
+}
+
+function resetSizeFromElement(source, target) {
+    const style = window.getComputedStyle(source, null);
+    target.width = Math.ceil(parseStyle(style, "width"));
+    target.height = Math.ceil(parseStyle(style, "height"));
+    target.style.width = target.width.toString() + "px";
+    target.style.height = target.height.toString() + "px";
 }
 
 function init() {
-    // Initialize canvas element dimensions from computed stylesheet
     memoryCanvas = document.getElementById("memoryCanvas");
     SMCanvas = document.getElementById("SMCanvas");
     kernelCanvas = document.getElementById("kernelCanvas");
-    [memoryCanvas, SMCanvas, kernelCanvas].forEach(canvas => {
-        const style = window.getComputedStyle(canvas, null);
-        canvas.width = parseStylePX(style, "width");
-        canvas.height = parseStylePX(style, "height");
-    });
 
+    // Initialize canvas element dimensions from computed stylesheet
+    resetSizeAttrsFromStyle(memoryCanvas);
+    resetSizeAttrsFromStyle(SMCanvas);
+
+    // Render kernel source to set pre-element size
+    const kernelSource = document.getElementById("kernelSource");
+    kernelSource.innerText = kernelSourceLines.join('\n');
+    // Align kernel source highlighting over the pre-element containing the source
+    resetSizeFromElement(kernelSource, kernelCanvas);
+
+    const sourceStyle = window.getComputedStyle(kernelSource, null);
+    const sourceLineHeight = parseStyle(sourceStyle, "line-height", "em");
+
+    // Initialize simulated GPU
     device = new Device();
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
     const program = {
         sourceLines: kernelSourceLines,
+        sourceLineHeight: sourceLineHeight,
         statements: kernelCallableStatements,
     };
     device.setProgram(grid, program);

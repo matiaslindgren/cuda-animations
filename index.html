@@ -15,10 +15,23 @@
         </div>
         <div id="SMCanvasContainer" class="column canvas-container">
             <h3><pre>Streaming multiprocessors</pre></h3>
+            <ul class="sm-list">
+                <li>
+                    <ul id="sm-state-1">
+                        <li><pre>cycle <span class="sm-cycle-counter">0</span></pre></li>
+                    </ul>
+                </li>
+                <li>
+                    <ul id="sm-state-2">
+                        <li><pre>cycle <span class="sm-cycle-counter">0</span></pre></li>
+                    </ul>
+                </li>
+            </ul>
             <canvas id="SMCanvas"></canvas>
         </div>
         <div id="kernelSourceCanvasContainer" class="column canvas-container">
             <h3><pre>CUDA kernel</pre></h3>
+            <pre id="kernelSource"></pre>
             <canvas id="kernelCanvas"></canvas>
         </div>
         <script src="src/config.js"></script>

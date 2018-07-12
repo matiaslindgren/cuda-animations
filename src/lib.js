@@ -428,21 +428,14 @@ class Instruction {
     }
 }
 
-// Drawable counter of SM cycles
-class CycleCounter extends Drawable {
-    constructor(...drawableArgs) {
-        super(...drawableArgs, '', CONFIG.animation.SMCycleLabelSize);
+class CycleCounter {
+    constructor(id) {
+        this.targetElement = document.getElementById("sm-state-" + id);
         this.cycles = 0;
-        this.drawableText = "cycle: 0";
     }
 
     cycle() {
         ++this.cycles;
-        this.drawableText = "cycle: " + this.cycles.toString();
-    }
-
-    step() {
-        super.draw();
     }
 }
 
@@ -565,11 +558,11 @@ class SMController {
     }
 }
 
-class StreamingMultiprocessor extends Drawable {
-    constructor(...drawableArgs) {
-        super(...drawableArgs);
+class StreamingMultiprocessor {
+    constructor(id) {
+        this.id = id;
         this.frameCounter = 0;
-        this.cycleLabel = new CycleCounter(...drawableArgs);
+        this.cycleLabel = new CycleCounter(id);
         this.framesPerCycle = CONFIG.SM.framesPerSMCycle;
         assert(this.framesPerCycle > 0, "frames per SM cycle must be at least 1");
         this.controller = new SMController();
@@ -579,15 +572,15 @@ class StreamingMultiprocessor extends Drawable {
     cycle() {
         this.frameCounter = 0;
         if (this.controller.program !== null) {
-            this.cycleLabel.cycle();
+            //this.cycleLabel.cycle();
             this.controller.cycle();
         }
     }
 
     // Animation loop step
     step() {
-        super.draw();
-        this.cycleLabel.step();
+        //super.draw();
+        //this.cycleLabel.step();
         if (Math.random() < 0.1) {
             // Simulated latency within this SM for the duration of a single animation frame
             return;
@@ -608,7 +601,7 @@ class Device {
 
     // Initialize all processors with new program
     setProgram(grid, program) {
-        this.kernelSource = new KernelSource(program.sourceLines);
+        this.kernelSource = new KernelSource(program.sourceLines, program.sourceLineHeight);
         const memoryAccessHandle = this.accessMemory.bind(this);
         this.multiprocessors.forEach(sm => {
             assert(sm.controller.program === null, "sm controllers should not be reset while they are running a program");
@@ -624,16 +617,7 @@ class Device {
     }
 
     createProcessors(count) {
-        return Array.from(
-            new Array(count),
-            (_, i) => {
-                const x = CONFIG.SM.paddingX;
-                const y = i * CONFIG.SM.height + (i + 1) * CONFIG.SM.paddingY;
-                const width = SMCanvas.width - 2 * CONFIG.SM.paddingX;
-                const height = CONFIG.SM.height;
-                return new StreamingMultiprocessor(x, y, width, height, SMCanvas, undefined, CONFIG.SM.fillRGBA);
-            }
-        );
+        return Array.from(new Array(count), (_, i) => new StreamingMultiprocessor(i));
     }
 
     accessMemory(i, noSimulation) {
@@ -661,42 +645,32 @@ class Device {
 }
 
 class KernelSource {
-    constructor(sourceLines) {
-        const sourceHeight = CONFIG.animation.kernelSourceTextHeight;
+    constructor(sourceLines, lineHeight) {
         const palette = CONFIG.animation.kernelHighlightPalette;
-        this.drawableLines = Array.from(sourceLines, (line, lineno) => {
+        this.highlightedLines = Array.from(sourceLines, (line, lineno) => {
             const _ = undefined;
             const x = 0;
-            const y = lineno * sourceHeight;
-            const textDrawable = new Drawable(x, y, _, _, kernelCanvas, _, _, line, CONFIG.animation.kernelSourceTextSize);
+            const y = lineno * lineHeight;
             const width = kernelCanvas.width;
-            const height = sourceHeight;
-            return {
-                text: textDrawable,
-                highlights: Array.from(palette, shades => {
-                    return Array.from(shades, highlightColor => {
-                        const hlDrawable = new Drawable(x, y, width, height, kernelCanvas, _, highlightColor);
-                        return {
-                            drawable: hlDrawable,
-                            on: false,
-                        };
-                    });
-                }),
-            };
+            return Array.from(palette, shades => {
+                return Array.from(shades, highlightColor => {
+                    const hlDrawable = new Drawable(x, y, width, lineHeight, kernelCanvas, _, highlightColor);
+                    return {
+                        drawable: hlDrawable,
+                        on: false,
+                    };
+                });
+            });
         });
     }
 
     setHighlight(colorIndex, lineno, on) {
-        this.drawableLines[lineno].highlights[colorIndex.y][colorIndex.x].on = on;
-    }
-
-    drawSourceLines() {
-        this.drawableLines.forEach(line => line.text.draw());
+        this.highlightedLines[lineno][colorIndex.y][colorIndex.x].on = on;
     }
 
     drawHighlighted() {
-        this.drawableLines.forEach(line => {
-            line.highlights.forEach(shades => {
+        this.highlightedLines.forEach(line => {
+            line.forEach(shades => {
                 shades.forEach(hl => {
                     if (hl.on) {
                         hl.drawable.draw();
@@ -708,8 +682,6 @@ class KernelSource {
     }
 
     step() {
-        // TODO: text drawing on each step is suboptimal, use highlighting layers
-        this.drawSourceLines();
         this.drawHighlighted();
     }
 }
