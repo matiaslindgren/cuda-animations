@@ -9,17 +9,17 @@
         <link href="img/chip.png" rel="icon">
     </head>
     <body>
-        <div id="memoryCanvasContainer" class="container canvas-container">
+        <div id="memoryCanvasContainer" class="column canvas-container">
             <h3><pre>Global device memory</pre></h3>
-            <canvas id="memoryCanvas" width=400 height=400></canvas>
+            <canvas id="memoryCanvas"></canvas>
         </div>
-        <div id="SMCanvasContainer" class="container canvas-container">
+        <div id="SMCanvasContainer" class="column canvas-container">
             <h3><pre>Streaming multiprocessors</pre></h3>
-            <canvas id="SMCanvas" width=600 height=400></canvas>
+            <canvas id="SMCanvas"></canvas>
         </div>
-        <div id="kernelSourceCanvasContainer" class="container canvas-container">
+        <div id="kernelSourceCanvasContainer" class="column canvas-container">
             <h3><pre>CUDA kernel</pre></h3>
-            <canvas id="kernelCanvas" width=600 height=400></canvas>
+            <canvas id="kernelCanvas"></canvas>
         </div>
         <script src="src/config.js"></script>
         <script src="src/lib.js"></script>

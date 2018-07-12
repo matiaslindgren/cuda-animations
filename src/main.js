@@ -44,10 +44,21 @@ const kernelCallableStatements = [
     },
 ];
 
+function parseStylePX(style, prop) {
+    return parseInt(style.getPropertyValue(prop).split("px")[0]);
+}
+
 function init() {
+    // Initialize canvas element dimensions from computed stylesheet
     memoryCanvas = document.getElementById("memoryCanvas");
     SMCanvas = document.getElementById("SMCanvas");
     kernelCanvas = document.getElementById("kernelCanvas");
+    [memoryCanvas, SMCanvas, kernelCanvas].forEach(canvas => {
+        const style = window.getComputedStyle(canvas, null);
+        canvas.width = parseStylePX(style, "width");
+        canvas.height = parseStylePX(style, "height");
+    });
+
     device = new Device();
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
     const program = {

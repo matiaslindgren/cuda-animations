@@ -41,7 +41,7 @@ const CONFIG = {
         columnSlotCount: 32,
         // Empty space between each slot on all sides
         slotPadding: 1,
-        slotSize: 10,
+        slotSize: 14,
         slotFillRGBA: [100, 100, 100, 0.15],
         // Amount of animation steps of the cooldown transition after touching a memory index
         coolDownPeriod: 15,
@@ -54,7 +54,7 @@ const CONFIG = {
         pendingStateRGBA: [60, 60, 240, 0.2],
     },
     SM: {
-        count: 3,
+        count: 2,
         warpSize: 32,
         warpSchedulers: 2,
         // The amount of animation render frames simulating one multiprocessor cycle

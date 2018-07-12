@@ -1,21 +1,10 @@
-.canvas-container {
-    position: absolute;
-}
-
-#memoryCanvasContainer {
-    left: 5px;
-}
-
-#SMCanvasContainer {
-    left: 450px;
-}
-
-#kernelSourceCanvasContainer {
-    position: relative;
-    left: 450px;
-    top: 450px;
+.column {
+    float: left;
+    width: 500px;
+    height: 550px;
 }
 
 canvas {
-    margin-bottom: 5px;
+    width: 100%;
+    height: 90%;
 }
