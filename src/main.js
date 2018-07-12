@@ -87,6 +87,9 @@ function draw(now) {
     clear(SMCanvas);
     clear(kernelCanvas);
     device.step();
+    if (device.programTerminated()) {
+        pause();
+    }
 }
 
 function restart() {

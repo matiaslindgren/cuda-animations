@@ -619,6 +619,10 @@ class Device {
         });
     }
 
+    programTerminated() {
+        return this.multiprocessors.every(sm => sm.controller.program === null);
+    }
+
     createProcessors(count) {
         return Array.from(
             new Array(count),
