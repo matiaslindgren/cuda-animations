@@ -428,26 +428,29 @@ class Instruction {
     }
 }
 
-class CycleCounter {
+class SMstats {
     constructor(stateElement) {
-        this.targetElement = stateElement.querySelector("li pre span.sm-cycle-counter");
+        this.stateElement = stateElement;
+        this.cycleCounter = stateElement.querySelector("li pre span.sm-cycle-counter");
         this.cycles = 0;
     }
 
     cycle() {
         ++this.cycles;
-        this.targetElement.innerHTML = this.cycles.toString();
+        this.cycleCounter.innerHTML = this.cycles.toString();
     }
 }
 
 class SMController {
-    constructor() {
+    constructor(id) {
         this.schedulerCount = CONFIG.SM.warpSchedulers;
         this.residentWarps = new Array();
         this.grid = null;
         this.program = null;
         this.activeBlock = null;
         this.memoryAccessHandle = null;
+        const stateElement = document.getElementById("sm-state-" + id);
+        this.statsWidget = new SMstats(stateElement);
     }
 
     // Free all resident warps and take next available block from the grid
@@ -542,6 +545,7 @@ class SMController {
     }
 
     cycle() {
+        this.statsWidget.cycle();
         this.scheduleWarps();
         this.updateProgramCounters();
         const nonTerminatedWarps = Array.from(this.nonTerminatedWarps());
@@ -562,18 +566,15 @@ class SMController {
 class StreamingMultiprocessor {
     constructor(id) {
         this.frameCounter = 0;
-        const stateElement = document.getElementById("sm-state-" + id);
-        this.cycleCounter = new CycleCounter(stateElement);
         this.framesPerCycle = CONFIG.SM.framesPerSMCycle;
         assert(this.framesPerCycle > 0, "frames per SM cycle must be at least 1");
-        this.controller = new SMController();
+        this.controller = new SMController(id);
     }
 
     // Simulate one processor cycle
     cycle() {
         this.frameCounter = 0;
         if (this.controller.program !== null) {
-            this.cycleCounter.cycle();
             this.controller.cycle();
         }
     }
