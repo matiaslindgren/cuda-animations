@@ -2,6 +2,13 @@
     float: left;
     width: 500px;
     height: 550px;
+    padding-left: 25px;
+    padding-left: 25px;
+}
+
+ul.sm-list {
+    padding-left: 15px;
+    padding-right: 15px;
 }
 
 ul.sm-list > li {
@@ -27,4 +34,8 @@ canvas {
     line-height: 20px;
     font-size: 14px;
     margin: 0;
+}
+
+#SMCanvasContainer {
+    width: 350px;
 }
