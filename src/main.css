@@ -7,12 +7,12 @@
 }
 
 #SMCanvasContainer {
-    left: 850px;
+    left: 450px;
 }
 
 #kernelSourceCanvasContainer {
     position: relative;
-    left: 850px;
+    left: 450px;
     top: 450px;
 }
 

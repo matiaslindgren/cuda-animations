@@ -88,6 +88,10 @@ class L2Cache {
         return this.lines.findIndex(cached => cached > 0 && aligned === cached);
     }
 
+    getQueuedInstruction(i) {
+        return this.memoryAccessQueue.find(instr => instr.data.index === i);
+    }
+
     addLine(i, j) {
         // Add new cacheline i with cached index j
         this.lines[i] = this.align(j) + 1;
@@ -103,7 +107,7 @@ class L2Cache {
     }
 
     queueMemoryAccess(i) {
-        let instruction = this.memoryAccessQueue.find(instr => instr.data.index === i);
+        let instruction = this.getQueuedInstruction(i);
         if (typeof instruction !== "undefined") {
             // Memory access at index i already queued
             return instruction;
@@ -130,11 +134,21 @@ class L2Cache {
         return fetchInstruction;
     }
 
-    // Check if device memory index i is in some of the cache lines
-    isCached(i) {
-        return this.getCachedIndex(i) >= 0;
+    getCacheState(i) {
+        if (this.getCachedIndex(i) >= 0) {
+            return L2Cache.indexStates.cached;
+        } else if (typeof this.getQueuedInstruction(i) !== "undefined") {
+            return L2Cache.indexStates.pendingMemoryAccess;
+        } else {
+            return L2Cache.indexStates.notInCache;
+        }
     }
 }
+L2Cache.indexStates = {
+    notInCache: 0,
+    cached: 1,
+    pendingMemoryAccess: 2,
+};
 
 // Namespace object for kernel simulation
 class CUDAKernelContext {
@@ -198,7 +212,7 @@ class DeviceMemory extends Drawable {
     step() {
         this.L2Cache.step();
         this.slots.forEach((slot, i) => {
-            slot.setCachedState(this.L2Cache.isCached(i));
+            slot.setCachedState(this.L2Cache.getCacheState(i));
             slot.step();
         });
         super.draw();
@@ -217,6 +231,7 @@ class MemorySlot extends Drawable {
         this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
         this.coolDownStep = (1.0 - this.defaultColor[3]) / this.coolDownPeriod;
         this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
+        this.pendingColor = CONFIG.cache.pendingStateRGBA.slice();
     }
 
     // Simulate a memory access to this index
@@ -226,15 +241,27 @@ class MemorySlot extends Drawable {
     }
 
     // Update slot cache status to highlight cached slots in rendering
-    setCachedState(isCached) {
-        const newColor = (isCached ? this.cachedColor : this.defaultColor).slice();
+    setCachedState(state) {
+        let newColor;
+        switch(state) {
+            case L2Cache.indexStates.cached:
+                newColor = this.cachedColor;
+                break;
+            case L2Cache.indexStates.pendingMemoryAccess:
+                newColor = this.pendingColor;
+                break;
+            case L2Cache.indexStates.notInCache:
+            default:
+                newColor= this.defaultColor;
+                break;
+        }
         // Don't update alpha if this slot is cooling down from a previous touch
-        if (this.hotness > 0 && this.fillRGBA[3] > newColor[3]) {
-            for (let i = 0; i < 3; ++i) {
-                this.fillRGBA[i] = newColor[i];
-            }
-        } else {
-            this.fillRGBA = newColor;
+        // if (this.hotness > 0 && this.fillRGBA[3] > newColor[3]) {
+            // for (let i = 0; i < 3; ++i) {
+                // this.fillRGBA[i] = newColor[i];
+            // }
+        if (this.hotness === 0) {
+            this.fillRGBA = newColor.slice();
         }
     }
 
@@ -632,16 +659,7 @@ class Device {
 class KernelSource {
     constructor(sourceLines) {
         const sourceHeight = CONFIG.animation.kernelSourceTextHeight;
-        const palette = [
-            [
-                [50, 50, 180, 0.15],
-                [50, 50, 220, 0.15],
-            ],
-            [
-                [50, 180, 50, 0.15],
-                [50, 220, 50, 0.15],
-            ],
-        ];
+        const palette = CONFIG.animation.kernelHighlightPalette;
         this.drawableLines = Array.from(sourceLines, (line, lineno) => {
             const _ = undefined;
             const x = 0;
