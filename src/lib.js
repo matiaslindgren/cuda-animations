@@ -170,9 +170,10 @@ class CUDAKernelContext {
     }
 
     // Simulated arithmetic instruction
-    arithmetic() {
+    arithmetic(result) {
         // Create latency
         this.prevInstruction = Instruction.arithmetic();
+        return result;
     }
 
     // Simulated random access memory transaction

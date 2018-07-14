@@ -20,27 +20,22 @@ const kernelSourceLines = [
 ];
 const kernelCallableStatements = [
     function(input, n) {
-        this.arithmetic();
-        this.locals.i = this.threadIdx.x + this.blockIdx.x * this.blockDim.x;
+        this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x);
     },
     function(input, n) {
         this.locals.x = this.arrayGet(input, this.locals.i);
     },
     function(input, n) {
-        this.arithmetic();
-        this.locals.a = this.locals.x * this.locals.x;
+        this.locals.a = this.arithmetic(this.locals.x * this.locals.x);
     },
     function(input, n) {
-        this.arithmetic();
-        this.locals.b = 2.0 * this.locals.a;
+        this.locals.b = this.arithmetic(2.0 * this.locals.a);
     },
     function(input, n) {
-        this.arithmetic();
-        this.locals.c = this.locals.a * this.locals.b + this.locals.x;
+        this.locals.c = this.arithmetic(this.locals.a * this.locals.b + this.locals.x);
     },
     function(input, n) {
-        this.arithmetic();
-        this.locals.d = this.locals.a + this.locals.b + this.locals.c;
+        this.locals.d = this.arithmetic(this.locals.a + this.locals.b + this.locals.c);
     },
 ];
 
