@@ -123,19 +123,14 @@ class L2Cache {
 
     getCacheState(i) {
         if (this.getCachedIndex(i) >= 0) {
-            return L2Cache.indexStates.cached;
+            return "cached";
         } else if (typeof this.getQueuedInstruction(i) !== "undefined") {
-            return L2Cache.indexStates.pendingMemoryAccess;
+            return "pendingMemoryAccess";
         } else {
-            return L2Cache.indexStates.notInCache;
+            return "notInCache";
         }
     }
 }
-L2Cache.indexStates = {
-    notInCache: 0,
-    cached: 1,
-    pendingMemoryAccess: 2,
-};
 
 // Namespace object for kernel simulation
 class CUDAKernelContext {
@@ -232,13 +227,13 @@ class MemorySlot extends Drawable {
     setCachedState(state) {
         let newColor;
         switch(state) {
-            case L2Cache.indexStates.cached:
+            case "cached":
                 newColor = this.cachedColor;
                 break;
-            case L2Cache.indexStates.pendingMemoryAccess:
+            case "pendingMemoryAccess":
                 newColor = this.pendingColor;
                 break;
-            case L2Cache.indexStates.notInCache:
+            case "notInCache":
             default:
                 newColor= this.defaultColor;
                 break;
