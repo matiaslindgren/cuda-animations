@@ -1,7 +1,7 @@
 "use strict";
 
 class Drawable {
-    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA, text, fontSize) {
+    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -10,13 +10,6 @@ class Drawable {
         // Copy RGBA arrays, if given, else set to null
         this.strokeRGBA = (typeof strokeRGBA === "undefined") ? null : strokeRGBA.slice();
         this.fillRGBA = (typeof fillRGBA === "undefined") ? null : fillRGBA.slice();
-        // If text is given, this drawable renders text
-        if (typeof text !== "undefined") {
-            this.drawableText = text;
-            this.fontSize = fontSize;
-        } else {
-            this.drawableText = null;
-        }
     }
 
     draw() {
@@ -32,12 +25,6 @@ class Drawable {
         if (this.strokeRGBA !== null) {
             ctx.strokeStyle = "rgba(" + this.strokeRGBA.join(',') + ')';
             ctx.strokeRect(x, y, width, height);
-        }
-        if (this.drawableText !== null) {
-            const fontSize = this.fontSize;
-            ctx.font = fontSize + "px monospace";
-            ctx.fillStyle = "rgba(0, 0, 0, 1)";
-            ctx.fillText(this.drawableText, x, y + fontSize);
         }
     }
 }
