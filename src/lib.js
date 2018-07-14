@@ -267,9 +267,12 @@ class Grid {
         this.dimGrid = dimGrid;
         this.dimBlock = dimBlock;
         this.blocks = Array.from(
-            new Array(dimGrid.x),
-            (_, x) => new Block({x: x}, dimBlock)
-        );
+            new Array(dimGrid.x * dimGrid.y),
+            (_, i) => {
+                const x = i % dimGrid.x;
+                const y = Math.floor(i / dimGrid.x);
+                return new Block({x: x, y: y}, dimBlock);
+            });
     }
 
     nextFreeBlockIndex() {
@@ -290,13 +293,21 @@ class Block {
     // takes as argument the memory access handle of the SM controller this block is being assigned to
     *asWarps(memoryAccessHandle) {
         const warpSize = CONFIG.SM.warpSize;
-        if (this.dim.x % warpSize !== 0) {
+        const threadCount = this.dim.x * this.dim.y;
+        if (threadCount % warpSize !== 0) {
             console.error("Uneven block size, unable to divide block evenly into warps");
             return;
         }
-        for (let w = 0; w < this.dim.x / warpSize; ++w) {
-            const threadIndexes = Array.from(new Array(warpSize), (_, i) => w * warpSize + i);
-            yield new Warp(this, threadIndexes, memoryAccessHandle);
+        let threadIndexes = new Array;
+        for (let j = 0; j < this.dim.y; ++j) {
+            for (let i = 0; i < this.dim.x; ++i) {
+                threadIndexes.push({x: i, y: j});
+                if (threadIndexes.length === warpSize) {
+                    const warp = new Warp(this, threadIndexes.slice(), memoryAccessHandle);
+                    threadIndexes = new Array;
+                    yield warp;
+                }
+            }
         }
     }
 }
@@ -338,7 +349,7 @@ class Warp {
     constructor(block, threadIndexes, memoryAccessHandle) {
         this.terminated = false;
         this.running = false;
-        this.threads = Array.from(threadIndexes, i => new Thread({x: i}, memoryAccessHandle));
+        this.threads = Array.from(threadIndexes, idx => new Thread(idx, memoryAccessHandle));
         this.initCUDAKernelContext(block);
         // Assuming pre-Volta architecture, with program counters for each warp but not yet for each thread
         this.programCounter = 0;
