@@ -136,6 +136,7 @@ class L2Cache {
 class CUDAKernelContext {
     constructor() {
         this.locals = {};
+        this.args = {};
         this.threadIdx = {
             x: null,
             y: null,
@@ -159,11 +160,26 @@ class CUDAKernelContext {
     }
 
     // Simulated random access memory transaction
-    arrayGet(memoryAccessHandle, index) {
-        // Simulate memory access
-        this.prevInstruction = memoryAccessHandle(index);
+    arrayGet(memoryGetHandle, index) {
+        // Simulate memory get
+        this.prevInstruction = memoryGetHandle(index);
         // Get the actual value without simulation
-        return memoryAccessHandle(index, true);
+        return memoryGetHandle(index, true);
+    }
+
+    // Simulated random access memory transaction
+    arraySet(memorySetHandle, index, value) {
+        // Simulate memory set
+        this.prevInstruction = memorySetHandle(index, false, value);
+        // Set the actual value without simulation
+        memorySetHandle(index, true, value);
+    }
+
+    // Jump from current line by offset
+    jump(offset) {
+        const instr = new Instruction("jump", 1);
+        instr.data = {jumpOffset: offset};
+        this.prevInstruction = instr;
     }
 }
 
@@ -289,9 +305,8 @@ class Block {
         this.idx = blockIdx;
     }
 
-    // Generator of thread warps from this block,
-    // takes as argument the memory access handle of the SM controller this block is being assigned to
-    *asWarps(memoryAccessHandle) {
+    // Generator of thread warps from this block, takes as argument a kernel call argument object
+    *asWarps(kernelArgs) {
         const warpSize = CONFIG.SM.warpSize;
         const threadCount = this.dim.x * this.dim.y;
         if (threadCount % warpSize !== 0) {
@@ -303,7 +318,7 @@ class Block {
             for (let i = 0; i < this.dim.x; ++i) {
                 threadIndexes.push({x: i, y: j});
                 if (threadIndexes.length === warpSize) {
-                    const warp = new Warp(this, threadIndexes.slice(), memoryAccessHandle);
+                    const warp = new Warp(this, threadIndexes.slice(), kernelArgs);
                     threadIndexes = new Array;
                     yield warp;
                 }
@@ -314,12 +329,12 @@ class Block {
 
 // Simulated CUDA thread
 class Thread {
-    constructor(threadIdx, memoryAccessHandle) {
+    constructor(threadIdx) {
         this.idx = threadIdx;
+        this.isMasked = false;
         this.statement = null;
         this.kernelContext = null;
         this.instruction = Instruction.empty();
-        this.memoryAccessHandle = memoryAccessHandle
     }
 
     // True if this thread is ready to take a new instruction
@@ -328,29 +343,29 @@ class Thread {
     }
 
     cycle() {
-        if (this.idx.x < 0) {
-            // Masked thread, do nothing
-            return;
+        if (this.isMasked) {
+            return null;
         }
         if (this.statement !== null) {
             // Create new instruction from queued statement
-            this.statement.apply(this.kernelContext, [this.memoryAccessHandle, 0]);
+            this.statement.apply(this.kernelContext);
             this.instruction = this.kernelContext.prevInstruction;
             this.statement = null;
         } else {
             // Continue waiting for instruction to complete
             this.instruction.cycle();
         }
+        return this.instruction;
     }
 }
 
 // Simulated group of CUDA threads running in an SM
 class Warp {
-    constructor(block, threadIndexes, memoryAccessHandle) {
+    constructor(block, threadIndexes, kernelArgs) {
         this.terminated = false;
         this.running = false;
-        this.threads = Array.from(threadIndexes, idx => new Thread(idx, memoryAccessHandle));
-        this.initCUDAKernelContext(block);
+        this.threads = Array.from(threadIndexes, idx => new Thread(idx));
+        this.initCUDAKernelContext(block, kernelArgs);
         // Assuming pre-Volta architecture, with program counters for each warp but not yet for each thread
         this.programCounter = 0;
     }
@@ -361,14 +376,17 @@ class Warp {
     }
 
     // Set threadIdx, blockIdx etc. namespace for simulated CUDA kernel
-    initCUDAKernelContext(block) {
+    initCUDAKernelContext(block, kernelArgs) {
         // Populate simulated CUDA kernel namespace for each thread
         const warpContext = {
             blockIdx: block.idx,
             blockDim: block.dim
         };
         this.threads.forEach(t => {
-            const threadContext = { threadIdx: t.idx };
+            const threadContext = {
+                threadIdx: t.idx,
+                args: Object.assign({}, kernelArgs),
+            };
             t.kernelContext = Object.assign(new CUDAKernelContext(), warpContext, threadContext);
         });
     }
@@ -442,7 +460,7 @@ class SMController {
         this.grid = null;
         this.program = null;
         this.activeBlock = null;
-        this.memoryAccessHandle = null;
+        this.kernelArgs = null;
         const stateElement = document.getElementById("sm-state-" + id);
         this.statsWidget = new SMstats(stateElement);
     }
@@ -457,7 +475,7 @@ class SMController {
         const newBlock = this.grid.blocks[i];
         this.activeBlock = newBlock;
         this.activeBlock.locked = true;
-        this.residentWarps = Array.from(this.activeBlock.asWarps(this.memoryAccessHandle));
+        this.residentWarps = Array.from(this.activeBlock.asWarps(this.kernelArgs));
         return true;
     }
 
@@ -596,10 +614,9 @@ class Device {
     // Initialize all processors with new program
     setProgram(grid, program) {
         this.kernelSource = new KernelSource(program.sourceLines, program.sourceLineHeight);
-        const memoryAccessHandle = this.accessMemory.bind(this);
         this.multiprocessors.forEach(sm => {
             assert(sm.controller.program === null, "sm controllers should not be reset while they are running a program");
-            sm.controller.memoryAccessHandle = memoryAccessHandle;
+            sm.controller.kernelArgs = Object.assign({}, program.kernelArgs);
             sm.controller.program = program;
             sm.controller.grid = grid;
             sm.controller.scheduleNextBlock();
@@ -614,13 +631,22 @@ class Device {
         return Array.from(new Array(count), (_, i) => new StreamingMultiprocessor(i + 1));
     }
 
-    accessMemory(i, noSimulation) {
+    memoryTransaction(type, i, noSimulation, newValue) {
+        if (type !== "get" && type !== "set") {
+            console.error("Invalid memory access type:", type);
+        }
         if (typeof noSimulation !== "undefined" && noSimulation) {
-            // Get the actual JavaScript array value
-            return this.memory.slots[i].value;
+            // Access actual JavaScript array value
+            if (type === "get") {
+                return this.memory.slots[i].value;
+            } else if (type === "set") {
+                this.memory.slots[i].value = newValue;
+            }
         } else {
             // Simulate memory access through L2Cache and return an Instruction with latency
-            return this.memory.access(i);
+            if (type === "get" || type === "set") {
+                return this.memory.access(i);
+            }
         }
     }
 

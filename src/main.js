@@ -81,10 +81,16 @@ function init() {
     // Initialize simulated GPU
     device = new Device();
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
+    const kernelArgs = {
+        output: device.memoryTransaction.bind(device, "set"),
+        input: device.memoryTransaction.bind(device, "get"),
+        n: 32,
+    };
     const program = {
         sourceLines: kernelSourceLines,
         sourceLineHeight: sourceLineHeight,
         statements: kernelCallableStatements,
+        kernelArgs: kernelArgs,
     };
     device.setProgram(grid, program);
 }
