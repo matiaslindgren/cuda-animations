@@ -40,6 +40,7 @@ class L2Cache {
         // Amount of words in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
+        // TODO simulate throughtput limit from bus width here
         this.memoryAccessQueue = new Array();
     }
 
@@ -150,6 +151,12 @@ class CUDAKernelContext {
             y: null,
         };
         this.prevInstruction = null;
+    }
+
+    // Identity function with 1 cycle latency
+    identity(x) {
+        this.prevInstruction = new Instruction("identity", 1);
+        return x;
     }
 
     // Simulated arithmetic instruction
@@ -400,6 +407,11 @@ class Warp {
     // All threads in a warp do one cycle in parallel
     cycle() {
         this.threads.forEach(t => t.cycle());
+        // inelegant jump instruction hack, assuming all threads have the same jump instruction at the same cycle
+        const instr = this.threads[0].instruction;
+        if (instr !== null && instr.name === "jump" && !instr.isDone()) {
+            this.programCounter += instr.data.jumpOffset;
+        }
     }
 }
 

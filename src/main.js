@@ -9,33 +9,52 @@ var prevRenderTime = performance.now();
 var drawing = true;
 
 const kernelSourceLines = [
-    "__global__ void kernel(const float* input) {",
+    "__global__ void kernel(float* output, const float* input, int n) {",
     "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
-    "    const float x = input[i];",
-    "    float a = x * x;",
-    "    float b = 2.0 * a;",
-    "    float c = a * b + x;",
-    "    float d = a + b + c;",
+    "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
+    "    float v = HUGE_VALF;",
+    "    for (int k = 0; k < n; ++k) {",
+    "        float x = input[n*i + k];",
+    "        float y = input[n*k + j];",
+    "        float z = x + y;",
+    "        v = min(v, z);",
+    "    }",
+    "    output[n*i + j] = v;",
     "}",
 ];
 const kernelCallableStatements = [
-    function(input, n) {
+    function() {
         this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x);
     },
-    function(input, n) {
-        this.locals.x = this.arrayGet(input, this.locals.i);
+    function() {
+        this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y);
     },
-    function(input, n) {
-        this.locals.a = this.arithmetic(this.locals.x * this.locals.x);
+    function() {
+        this.locals.v = this.identity(Infinity);
     },
-    function(input, n) {
-        this.locals.b = this.arithmetic(2.0 * this.locals.a);
+    function() {
+        this.locals.k = this.identity(0);
     },
-    function(input, n) {
-        this.locals.c = this.arithmetic(this.locals.a * this.locals.b + this.locals.x);
+    function() {
+        this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.k);
     },
-    function(input, n) {
-        this.locals.d = this.arithmetic(this.locals.a + this.locals.b + this.locals.c);
+    function() {
+        this.locals.y = this.arrayGet(this.args.input, this.args.n * this.locals.k + this.locals.j);
+    },
+    function() {
+        this.locals.z = this.arithmetic(this.locals.x + this.locals.y);
+    },
+    function() {
+        this.locals.v = this.arithmetic(Math.min(this.locals.v, this.locals.z));
+    },
+    function() {
+        ++this.locals.k;
+        if (false && this.locals.k < this.args.n) {
+            this.jump(-4);
+        }
+    },
+    function() {
+        this.arraySet(this.args.output, this.args.n * this.locals.i + this.locals.j, this.locals.v);
     },
 ];
 
@@ -92,6 +111,9 @@ function init() {
         statements: kernelCallableStatements,
         kernelArgs: kernelArgs,
     };
+    if (kernelSourceLines.length - 2 !== kernelCallableStatements.length) {
+        console.error("WARNING: Inconsistent kernel source line count when compared to callable statements");
+    }
     device.setProgram(grid, program);
 }
 
