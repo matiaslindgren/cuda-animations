@@ -65,7 +65,13 @@ const CONFIG = {
         colorRGBA: [100, 100, 100, 0.8],
     },
     grid: {
-        dimGrid: {x: Math.round(32*32/64)},
-        dimBlock: {x: 64},
+        dimGrid: {
+            x: Math.round(32*32/8),
+            y: Math.round(32*32/8),
+        },
+        dimBlock: {
+            x: 8,
+            y: 8
+        },
     },
 };
