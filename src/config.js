@@ -11,22 +11,24 @@ function printobj(o) {
     console.log(JSON.stringify(o));
 }
 
+function generatePaletteRGBA(shadeCount) {
+    const baseRGBA = [50, 50, 50, 0.15];
+    const shadeIncrement = (255 - 50) / shadeCount;
+    return Array.from(new Array(3), (_, component) => {
+        return Array.from(new Array(shadeCount), (_, shade) => {
+            const color = baseRGBA.slice();
+            color[component] = 255 - Math.floor((shade + 1) * shadeIncrement);
+            return color;
+        });
+    });
+}
+
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
         drawDelayMS: 1000.0 / 420.0,
         SMCycleLabelSize: 20,
-        kernelHighlightPalette: [
-            [[150, 50, 50, 0.15],
-             [200, 50, 50, 0.15],
-             [250, 50, 50, 0.15]],
-            [[50, 150, 50, 0.15],
-             [50, 200, 50, 0.15],
-             [50, 250, 50, 0.15]],
-            [[50, 50, 150, 0.15],
-             [50, 50, 200, 0.15],
-             [50, 50, 250, 0.15]],
-        ],
+        kernelHighlightPalette: generatePaletteRGBA(4),
     },
     latencies: {
         arithmetic: 10,
