@@ -190,6 +190,7 @@ class CUDAKernelContext {
     }
 }
 
+// Area of simulated GPU DRAM
 class DeviceMemory extends Drawable {
     constructor(x, y, width, height, canvas) {
         super(x, y, width, height, canvas);
