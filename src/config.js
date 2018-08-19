@@ -66,8 +66,8 @@ const CONFIG = {
     },
     grid: {
         dimGrid: {
-            x: Math.round(32*32/8),
-            y: Math.round(32*32/8),
+            x: Math.round(32/8),
+            y: Math.round(32/8),
         },
         dimBlock: {
             x: 8,
