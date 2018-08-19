@@ -199,7 +199,6 @@ class DeviceMemory extends Drawable {
         const slotSize = CONFIG.memory.slotSize;
         const slotPadding = CONFIG.memory.slotPadding;
         const slotFillRGBA = CONFIG.memory.slotFillRGBA;
-        this.L2Cache = new L2Cache();
         this.slots = Array.from(
             new Array(rowSlotCount * columnSlotCount),
             (_, i) => {
@@ -213,13 +212,11 @@ class DeviceMemory extends Drawable {
     // Simulate a memory access to index i in the global memory
     access(i) {
         this.slots[i].touch();
-        return this.L2Cache.fetch(i);
     }
 
-    step() {
-        this.L2Cache.step();
+    step(getCacheState) {
         this.slots.forEach((slot, i) => {
-            slot.setCachedState(this.L2Cache.getCacheState(i));
+            slot.setCachedState(getCacheState(i));
             slot.step();
         });
         super.draw();
@@ -363,7 +360,6 @@ class Thread {
             // Continue waiting for instruction to complete
             this.instruction.cycle();
         }
-        return this.instruction;
     }
 }
 
@@ -388,12 +384,12 @@ class Warp {
         // Populate simulated CUDA kernel namespace for each thread
         const warpContext = {
             blockIdx: block.idx,
-            blockDim: block.dim
+            blockDim: block.dim,
+            args: Object.assign({}, kernelArgs),
         };
         this.threads.forEach(t => {
             const threadContext = {
                 threadIdx: t.idx,
-                args: Object.assign({}, kernelArgs),
             };
             t.kernelContext = Object.assign(new CUDAKernelContext(), warpContext, threadContext);
         });
@@ -618,10 +614,14 @@ class StreamingMultiprocessor {
 
 // Wrapper around the device memory and multiprocessors, simulating memory access handling and scheduling
 class Device {
-    constructor() {
+    constructor(memoryCanvas) {
         this.memory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
         this.multiprocessors = this.createProcessors(CONFIG.SM.count);
         this.kernelSource = null;
+        this.L2Cache = new L2Cache();
+    }
+
+    setMemory(input, output) {
     }
 
     // Initialize all processors with new program
@@ -658,13 +658,18 @@ class Device {
         } else {
             // Simulate memory access through L2Cache and return an Instruction with latency
             if (type === "get" || type === "set") {
-                return this.memory.access(i);
+                // Touch memory slot
+                this.memory.access(i);
+                // Return instruction with latency
+                return this.L2Cache.fetch(i);
             }
         }
     }
 
     step() {
-        this.memory.step();
+        this.L2Cache.step();
+        const L2CacheStateHandle = this.L2Cache.getCachedIndex.bind(this.L2Cache);
+        this.memory.step(L2CacheStateHandle);
         this.multiprocessors.forEach((sm, smIndex) => {
             sm.step();
             sm.controller.residentWarps.forEach((warp, warpIndex) => {
