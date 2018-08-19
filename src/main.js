@@ -1,8 +1,8 @@
 "use strict";
 
 // All mutable global variables
-var memoryCanvas;
-var SMCanvas;
+var memoryCanvasInput;
+var memoryCanvasOutput;
 var kernelCanvas;
 var device;
 var prevRenderTime = performance.now();
@@ -80,13 +80,12 @@ function resetSizeFromElement(source, target) {
 }
 
 function init() {
-    memoryCanvas = document.getElementById("memoryCanvas");
-    SMCanvas = document.getElementById("SMCanvas");
+    memoryCanvasInput = document.getElementById("memoryCanvasInput");
+    memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
     kernelCanvas = document.getElementById("kernelCanvas");
 
     // Initialize canvas element dimensions from computed stylesheet
-    resetSizeAttrsFromStyle(memoryCanvas);
-    resetSizeAttrsFromStyle(SMCanvas);
+    [memoryCanvasInput, memoryCanvasOutput].forEach(canvas => resetSizeAttrsFromStyle(canvas));
 
     // Render kernel source to set pre-element size
     const kernelSource = document.getElementById("kernelSource");
@@ -98,7 +97,7 @@ function init() {
     const sourceLineHeight = parseStyle(sourceStyle, "line-height", "em");
 
     // Initialize simulated GPU
-    device = new Device();
+    device = new Device(memoryCanvasInput);
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
     const kernelArgs = {
         output: device.memoryTransaction.bind(device, "set"),
@@ -132,8 +131,8 @@ function draw(now) {
         return;
     }
     prevRenderTime = now;
-    clear(memoryCanvas);
-    clear(SMCanvas);
+    clear(memoryCanvasInput);
+    clear(memoryCanvasOutput);
     clear(kernelCanvas);
     device.step();
     if (device.programTerminated()) {
