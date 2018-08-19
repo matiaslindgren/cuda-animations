@@ -349,7 +349,7 @@ class Thread {
 
     cycle() {
         if (this.isMasked) {
-            return null;
+            return;
         }
         if (this.statement !== null) {
             // Create new instruction from queued statement

@@ -22,6 +22,9 @@ const kernelSourceLines = [
     "    output[n*i + j] = v;",
     "}",
 ];
+
+// Closures that simulate the CUDA statements above
+// Each closure is applied with a CUDA context, which can then be referenced as 'this' in the closure
 const kernelCallableStatements = [
     function() {
         this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x);
