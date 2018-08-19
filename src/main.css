@@ -29,6 +29,14 @@ canvas {
     height: 90%;
 }
 
+.menubar {
+    padding-left: 25px;
+}
+
+input[type=button] {
+    width: 80px;
+}
+
 #kernelSource {
     position: absolute;
     line-height: 20px;

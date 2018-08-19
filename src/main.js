@@ -153,4 +153,21 @@ function pause() {
     }
 }
 
-document.addEventListener("DOMContentLoaded", restart);
+// Define menubar buttons for interacting with the animation
+function initUI() {
+    const pauseButton = document.querySelector("#pause-button");
+    const restartButton = document.querySelector("#restart-button");
+    pauseButton.addEventListener("click", _ => {
+        pause();
+        pauseButton.value = drawing ? "Pause" : "Continue";
+    });
+    restartButton.addEventListener("click", _ => {
+        pauseButton.value = "Pause";
+        restart();
+    });
+}
+
+document.addEventListener("DOMContentLoaded", _ => {
+    initUI();
+    restart();
+});
