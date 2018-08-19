@@ -668,7 +668,7 @@ class Device {
 
     step() {
         this.L2Cache.step();
-        const L2CacheStateHandle = this.L2Cache.getCachedIndex.bind(this.L2Cache);
+        const L2CacheStateHandle = this.L2Cache.getCacheState.bind(this.L2Cache);
         this.memory.step(L2CacheStateHandle);
         this.multiprocessors.forEach((sm, smIndex) => {
             sm.step();
