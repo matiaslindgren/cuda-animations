@@ -2,7 +2,7 @@
 
 // All mutable global variables
 var memoryCanvasInput;
-var memoryCanvasOutput;
+//var memoryCanvasOutput;
 var kernelCanvas;
 var device;
 var prevRenderTime = performance.now();
@@ -57,7 +57,8 @@ const kernelCallableStatements = [
         }
     },
     function() {
-        this.arraySet(this.args.output, this.args.n * this.locals.i + this.locals.j, this.locals.v);
+        this.identity(0);
+        //this.arraySet(this.args.output, this.args.n * this.locals.i + this.locals.j, this.locals.v);
     },
 ];
 
@@ -84,11 +85,11 @@ function resetSizeFromElement(source, target) {
 
 function init() {
     memoryCanvasInput = document.getElementById("memoryCanvasInput");
-    memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
+    //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
     kernelCanvas = document.getElementById("kernelCanvas");
 
     // Initialize canvas element dimensions from computed stylesheet
-    [memoryCanvasInput, memoryCanvasOutput].forEach(canvas => resetSizeAttrsFromStyle(canvas));
+    [memoryCanvasInput].forEach(canvas => resetSizeAttrsFromStyle(canvas));
 
     // Render kernel source to set pre-element size
     const kernelSource = document.getElementById("kernelSource");
@@ -103,7 +104,8 @@ function init() {
     device = new Device(memoryCanvasInput);
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
     const kernelArgs = {
-        output: device.memoryTransaction.bind(device, "set"),
+        //output: device.memoryTransaction.bind(device, "set"),
+        output: function() { },
         input: device.memoryTransaction.bind(device, "get"),
         n: 32,
     };
@@ -135,7 +137,7 @@ function draw(now) {
     }
     prevRenderTime = now;
     clear(memoryCanvasInput);
-    clear(memoryCanvasOutput);
+    //clear(memoryCanvasOutput);
     clear(kernelCanvas);
     device.step();
     if (device.programTerminated()) {
