@@ -37,7 +37,7 @@ class L2Cache {
         // All are offset by 1, since 0 represents empty cacheline
         this.lines = new Uint16Array(CONFIG.cache.L2CacheLines);
         this.ages = new Uint8Array(CONFIG.cache.L2CacheLines);
-        // Amount of words in one cacheline
+        // Amount of words (graphical slots) in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
         // TODO simulate throughtput limit from bus width here
@@ -190,7 +190,8 @@ class CUDAKernelContext {
     }
 }
 
-// Area of simulated GPU DRAM
+// Drawable, simulated area of GPU DRAM.
+// Several DeviceMemory instances can be defined, e.g. for representing an input and output array
 class DeviceMemory extends Drawable {
     constructor(x, y, width, height, canvas) {
         super(x, y, width, height, canvas);
@@ -209,8 +210,7 @@ class DeviceMemory extends Drawable {
         );
     }
 
-    // Simulate a memory access to index i in the global memory
-    access(i) {
+    touch(i) {
         this.slots[i].touch();
     }
 
@@ -621,9 +621,6 @@ class Device {
         this.L2Cache = new L2Cache();
     }
 
-    setMemory(input, output) {
-    }
-
     // Initialize all processors with new program
     setProgram(grid, program) {
         this.kernelSource = new KernelSource(program.sourceLines, program.sourceLineHeight);
@@ -658,8 +655,8 @@ class Device {
         } else {
             // Simulate memory access through L2Cache and return an Instruction with latency
             if (type === "get" || type === "set") {
-                // Touch memory slot
-                this.memory.access(i);
+                // Touch memory slot to trigger visualization
+                this.memory.touch(i);
                 // Return instruction with latency
                 return this.L2Cache.fetch(i);
             }

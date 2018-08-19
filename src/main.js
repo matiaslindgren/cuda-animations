@@ -52,7 +52,7 @@ const kernelCallableStatements = [
     },
     function() {
         ++this.locals.k;
-        if (false && this.locals.k < this.args.n) {
+        if (this.locals.k < this.args.n) {
             this.jump(-4);
         }
     },
@@ -107,7 +107,7 @@ function init() {
         //output: device.memoryTransaction.bind(device, "set"),
         output: function() { },
         input: device.memoryTransaction.bind(device, "get"),
-        n: 32,
+        n: CONFIG.memory.rowSlotCount,
     };
     const program = {
         sourceLines: kernelSourceLines,
