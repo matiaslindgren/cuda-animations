@@ -38,4 +38,12 @@ canvas {
 
 #SMCanvasContainer {
     width: 350px;
+    height: 150px;
+}
+
+#memoryCanvasContainer {
+    height: 950px;
+}
+#memoryCanvasContainer canvas {
+    height: 50%;
 }

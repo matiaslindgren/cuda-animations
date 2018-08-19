@@ -10,11 +10,14 @@
     </head>
     <body>
         <div id="memoryCanvasContainer" class="column canvas-container">
-            <h3><pre>Global device memory</pre></h3>
-            <canvas id="memoryCanvas"></canvas>
+            <h3><pre>Global device memory (DRAM)</pre></h3>
+            <h4><pre>Input</pre></h4>
+            <canvas id="memoryCanvasInput"></canvas>
+            <h4><pre>Output</pre></h4>
+            <canvas id="memoryCanvasOutput"></canvas>
         </div>
         <div id="SMCanvasContainer" class="column canvas-container">
-            <h3><pre>Streaming multiprocessors</pre></h3>
+            <h3><pre>Streaming multiprocessors (SM)</pre></h3>
             <ul class="sm-list">
                 <li>
                     <ul id="sm-state-1">
@@ -27,12 +30,11 @@
                     </ul>
                 </li>
             </ul>
-            <canvas id="SMCanvas"></canvas>
-        </div>
-        <div id="kernelSourceCanvasContainer" class="column canvas-container">
-            <h3><pre>CUDA kernel</pre></h3>
-            <pre id="kernelSource"></pre>
-            <canvas id="kernelCanvas"></canvas>
+            <div id="kernelSourceCanvasContainer" class="canvas-container">
+                <h3><pre>CUDA kernel</pre></h3>
+                    <pre id="kernelSource"></pre>
+                    <canvas id="kernelCanvas"></canvas>
+            </div>
         </div>
         <script src="src/config.js"></script>
         <script src="src/lib.js"></script>
