@@ -53,7 +53,7 @@ const kernelCallableStatements = [
     function() {
         ++this.locals.k;
         if (this.locals.k < this.args.n) {
-            this.jump(-4);
+            this.jump(-5);
         }
     },
     function() {

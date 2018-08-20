@@ -162,7 +162,7 @@ class CUDAKernelContext {
 
     // Identity function with 1 cycle latency
     identity(x) {
-        this.prevInstruction = new Instruction("identity", 1);
+        this.prevInstruction = Instruction.identity();
         return x;
     }
 
@@ -262,15 +262,12 @@ class MemorySlot extends Drawable {
                 newColor = this.pendingColor;
                 break;
             case "notInCache":
-            default:
                 newColor= this.defaultColor;
                 break;
+            default:
+                console.error("unknown cache state: ", state);
+                break;
         }
-        // Don't update alpha if this slot is cooling down from a previous touch
-        // if (this.hotness > 0 && this.fillRGBA[3] > newColor[3]) {
-            // for (let i = 0; i < 3; ++i) {
-                // this.fillRGBA[i] = newColor[i];
-            // }
         if (this.hotness === 0) {
             this.fillRGBA = newColor.slice();
         }
@@ -439,6 +436,10 @@ class Instruction {
 
     static empty() {
         return new Instruction("empty", 0);
+    }
+
+    static identity() {
+        return new Instruction("identity", 1);
     }
 
     static arithmetic() {
