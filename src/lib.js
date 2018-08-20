@@ -40,6 +40,7 @@ class L2Cache {
         // Amount of words (graphical slots) in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
+        // Each element is an array of instructions, all waiting for the same index
         // TODO simulate throughtput limit from bus width here
         this.memoryAccessQueue = new Array();
     }
@@ -54,7 +55,10 @@ class L2Cache {
             ++this.ages[i];
         }
         // Add all completed memory fetches as cache lines
-        this.memoryAccessQueue.forEach(instruction => {
+        this.memoryAccessQueue.forEach(instructions => {
+            // For simplicity, assume all instructions waiting for the same index, have exactly same latency,
+            // regardless of when the instruction was issued
+            const instruction = instructions[0];
             if (instruction.isDone()) {
                 const memoryIndex = instruction.data.index;
                 const lineIndex = this.getCachedIndex(memoryIndex);
@@ -66,8 +70,8 @@ class L2Cache {
             }
         })
         // Delete all completed memory access instructions
-        this.memoryAccessQueue = this.memoryAccessQueue.filter(instruction => {
-            return !instruction.isDone();
+        this.memoryAccessQueue = this.memoryAccessQueue.filter(instructions => {
+            return !instructions.every(instr => instr.isDone());
         });
     }
 
@@ -76,8 +80,8 @@ class L2Cache {
         return this.lines.findIndex(cached => cached > 0 && aligned === cached);
     }
 
-    getQueuedInstruction(i) {
-        return this.memoryAccessQueue.find(instr => instr.data.index === i);
+    getQueuedInstructions(i) {
+        return this.memoryAccessQueue.find(instructions => instructions[0].data.index === i);
     }
 
     addLine(i, j) {
@@ -95,15 +99,18 @@ class L2Cache {
     }
 
     queueMemoryAccess(i) {
-        let instruction = this.getQueuedInstruction(i);
-        if (typeof instruction !== "undefined") {
+        let instructions = this.getQueuedInstructions(i);
+        if (typeof instructions === "object" && instructions.length > 0) {
             // Memory access at index i already queued
-            return instruction;
+            // Copy the instruction and add to queue
+            let instr = Object.assign(Instruction.empty(), instructions[0]);
+            instructions.push(instr);
+            return instr;
         }
-        // Create new instruction to access memory at index i
-        instruction = Instruction.deviceMemoryAccess(i);
-        this.memoryAccessQueue.push(instruction);
-        return instruction;
+        // Queue is empty, create new instruction to access memory at index i
+        instructions = [Instruction.deviceMemoryAccess(i)];
+        this.memoryAccessQueue.push(instructions);
+        return instructions[0];
     }
 
     // Simulate a memory access through L2, return true if the index was in the cache.
@@ -112,7 +119,7 @@ class L2Cache {
         let fetchInstruction;
         const j = this.getCachedIndex(i);
         if (j < 0) {
-            // i was not cached, queue fetch from memory
+            // i was not cached, create memory fetch and add to queue
             fetchInstruction = this.queueMemoryAccess(i);
         } else {
             // i was cached, set age of i's cacheline to zero
@@ -125,7 +132,7 @@ class L2Cache {
     getCacheState(i) {
         if (this.getCachedIndex(i) >= 0) {
             return "cached";
-        } else if (typeof this.getQueuedInstruction(i) !== "undefined") {
+        } else if (typeof this.getQueuedInstructions(i) !== "undefined") {
             return "pendingMemoryAccess";
         } else {
             return "notInCache";
