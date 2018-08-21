@@ -30,7 +30,7 @@ class Drawable {
 }
 
 // Simulated device memory accesses through L2.
-// LRU for convenience, although Mei and Chu [1] suggest the L2 replacement policy is not LRU
+// LRU for convenience and neat visual appearance, although Mei and Chu [1] suggest the L2 replacement policy is not LRU
 class L2Cache {
     constructor() {
         // Cached device memory indexes.

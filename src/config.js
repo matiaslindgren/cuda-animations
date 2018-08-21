@@ -140,7 +140,7 @@ const CUDAKernels = {
         ],
     },
     trivial: {
-        displayName: "Trivial",
+        displayName: "Trivial linear",
         kernelArgsN: 32,
         grid: {
             dimGrid: {
@@ -168,7 +168,7 @@ const CUDAKernels = {
                 this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y);
             },
             function() {
-                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.k);
+                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.j);
             },
             function() {
                 this.locals.y = this.arithmetic(this.locals.x + this.locals.x);
