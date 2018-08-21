@@ -168,14 +168,21 @@ class CUDAKernelContext {
         this.prevInstruction = null;
     }
 
+    assertDefined(x, f) {
+        assert(typeof x !== "undefined" && !Number.isNaN(x),
+            "Failed to evaluate \"" + f + "\" statement due to undefined kernel context variable. Please check that every variable in every statement is defined.");
+    }
+
     // Identity function with 1 cycle latency
     identity(x) {
+        this.assertDefined(x, "identity");
         this.prevInstruction = Instruction.identity();
         return x;
     }
 
     // Simulated arithmetic instruction
     arithmetic(result) {
+        this.assertDefined(result, "arithmetic");
         // Create latency
         this.prevInstruction = Instruction.arithmetic();
         return result;
@@ -183,6 +190,8 @@ class CUDAKernelContext {
 
     // Simulated random access memory transaction
     arrayGet(memoryGetHandle, index) {
+        this.assertDefined(memoryGetHandle, "arrayGet");
+        this.assertDefined(index, "arrayGet");
         // Simulate memory get
         this.prevInstruction = memoryGetHandle(index);
         // Get the actual value without simulation
@@ -191,6 +200,9 @@ class CUDAKernelContext {
 
     // Simulated random access memory transaction
     arraySet(memorySetHandle, index, value) {
+        this.assertDefined(memorySetHandle, "arraySet");
+        this.assertDefined(index, "arraySet");
+        this.assertDefined(value, "arraySet");
         // Simulate memory set
         this.prevInstruction = memorySetHandle(index, false, value);
         // Set the actual value without simulation
@@ -199,6 +211,7 @@ class CUDAKernelContext {
 
     // Jump from current line by offset
     jump(offset) {
+        this.assertDefined(offset, "jump");
         const instr = new Instruction("jump", 1);
         instr.data = {jumpOffset: offset};
         this.prevInstruction = instr;
@@ -365,7 +378,13 @@ class Thread {
         }
         if (this.statement !== null) {
             // Create new instruction from queued statement
-            this.statement.apply(this.kernelContext);
+            try {
+                this.statement.apply(this.kernelContext);
+            } catch(error) {
+                console.error("ERROR: while applying kernel context", this.kernelContext, "to statement", this.statement);
+                console.error(error);
+                failHard();
+            }
             this.instruction = this.kernelContext.prevInstruction;
             this.statement = null;
         } else {

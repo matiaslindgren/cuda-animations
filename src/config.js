@@ -1,9 +1,15 @@
 "use strict";
 
+function failHard() {
+    drawing = false;
+    const errorBanner = document.getElementById("body-error-banner");
+    errorBanner.innerHTML = "Something went wrong, please see the developer console";
+    errorBanner.hidden = false;
+}
+
 function assert(expr, msg) {
     if (!expr) {
-        console.error("ASSERTION FAILED", msg);
-        pause();
+        throw "ASSERTION FAILED: " + msg;
     }
 }
 
