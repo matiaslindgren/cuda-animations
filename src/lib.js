@@ -56,20 +56,18 @@ class L2Cache {
         }
         // Add all completed memory fetches as cache lines
         this.memoryAccessQueue.forEach(instructions => {
-            // For simplicity, assume that all instructions waiting for the same index have exactly same latency,
-            // regardless of when the instruction was issued
-            const instruction = instructions[0];
-            if (instruction.isDone()) {
-                const memoryIndex = instruction.data.index;
-                const lineIndex = this.getCachedIndex(memoryIndex);
-                if (lineIndex < 0) {
-                    this.addNew(memoryIndex);
-                } else {
-                    this.ages[lineIndex] = 0;
+            instructions.forEach(instruction => {
+                if (instruction.isDone()) {
+                    const memoryIndex = instruction.data.index;
+                    const lineIndex = this.getCachedIndex(memoryIndex);
+                    if (lineIndex < 0) {
+                        this.addNew(memoryIndex);
+                    } else {
+                        this.ages[lineIndex] = 0;
+                    }
                 }
-                assert(instructions.every(ins => ins.isDone()), "if first queued mem access is done, all should be, because they are queing for the same mem index");
-            }
-        })
+            });
+        });
         // Delete all completed memory access instructions
         this.memoryAccessQueue = this.memoryAccessQueue.filter(instructions => {
             return !instructions.every(instr => instr.isDone());
