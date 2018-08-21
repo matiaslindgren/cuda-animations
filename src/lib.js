@@ -707,47 +707,61 @@ class Device {
             sm.controller.residentWarps.forEach((warp, warpIndex) => {
                 const colorIndex = {x: warpIndex, y: smIndex};
                 const lineno = warp.programCounter;
-                this.kernelSource.setHighlight(colorIndex, lineno, true);
+                this.kernelSource.setHighlight(colorIndex, lineno);
             });
         });
         this.kernelSource.step();
     }
 }
 
+// Kernel source line highlighting with a queue for stacking highlight colors
+// according to arrival time
 class KernelSource {
     constructor(sourceLines, lineHeight) {
         const palette = CONFIG.animation.kernelHighlightPalette;
         this.highlightedLines = Array.from(sourceLines, (line, lineno) => {
-            const _ = undefined;
             const x = 0;
             const y = lineno * lineHeight;
             const width = kernelCanvas.width;
-            return Array.from(palette, shades => {
-                return Array.from(shades, highlightColor => {
-                    const hlDrawable = new Drawable(x, y, width, lineHeight, kernelCanvas, _, highlightColor);
-                    return {
-                        drawable: hlDrawable,
-                        on: false,
-                    };
-                });
-            });
+            return {
+                queue: new Array,
+                colors: Array.from(palette, shades => {
+                    return Array.from(shades, highlightColor => {
+                        const hlDrawable = new Drawable(x, y, width, lineHeight, kernelCanvas, undefined, highlightColor);
+                        return {
+                            drawable: hlDrawable,
+                        };
+                    });
+                }),
+            }
         });
     }
 
-    setHighlight(colorIndex, lineno, on) {
-        this.highlightedLines[lineno][colorIndex.y][colorIndex.x].on = on;
+    // Set line with number lineno highlighted with the line's color defined at colorIndex
+    setHighlight(colorIndex, lineno) {
+        this.highlightedLines[lineno].queue.push(colorIndex);
     }
 
     drawHighlighted() {
         this.highlightedLines.forEach(line => {
-            line.forEach(shades => {
-                shades.forEach(hl => {
-                    if (hl.on) {
-                        hl.drawable.draw();
-                    }
-                    hl.on = false;
-                });
+            const stackedColorCount = line.queue.length;
+            if (stackedColorCount === 0) {
+                // No highlighting on this line, skip
+                return;
+            }
+            // Highlight all queued colors
+            line.queue.forEach((colorIndex, queueIndex) => {
+                // Offset all colors and render first colors in queue at the bottom
+                const drawable = line.colors[colorIndex.y][colorIndex.x].drawable;
+                const prevY = drawable.y;
+                const prevHeight = drawable.height;
+                drawable.y += (stackedColorCount - queueIndex - 1) * prevHeight/stackedColorCount
+                drawable.height /= stackedColorCount;
+                drawable.draw();
+                drawable.y = prevY;
+                drawable.height = prevHeight;
             });
+            line.queue = new Array;
         });
     }
 
