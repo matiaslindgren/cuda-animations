@@ -26,7 +26,7 @@ function generatePaletteRGBA(shadeCount) {
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 420.0,
+        drawDelayMS: 1000.0 / 400.0,
         SMCycleLabelSize: 20,
         kernelHighlightPalette: generatePaletteRGBA(4),
     },
@@ -47,7 +47,7 @@ const CONFIG = {
         coolDownPeriod: 15,
     },
     cache: {
-        // Size of a L2 cacheline in words
+        // Size of a L2 cacheline in slots
         L2CacheLineSize: 8,
         L2CacheLines: 16,
         cachedStateRGBA: [60, 60, 240, 0.5],

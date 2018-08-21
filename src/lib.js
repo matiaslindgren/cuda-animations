@@ -56,7 +56,7 @@ class L2Cache {
         }
         // Add all completed memory fetches as cache lines
         this.memoryAccessQueue.forEach(instructions => {
-            // For simplicity, assume all instructions waiting for the same index, have exactly same latency,
+            // For simplicity, assume that all instructions waiting for the same index have exactly same latency,
             // regardless of when the instruction was issued
             const instruction = instructions[0];
             if (instruction.isDone()) {
@@ -67,6 +67,7 @@ class L2Cache {
                 } else {
                     this.ages[lineIndex] = 0;
                 }
+                assert(instructions.every(ins => ins.isDone()), "if first queued mem access is done, all should be, because they are queing for the same mem index");
             }
         })
         // Delete all completed memory access instructions
@@ -91,16 +92,25 @@ class L2Cache {
     }
 
     // Replace the oldest cacheline with i
+    // In case two cache lines have the same age, the line with a lower index is taken as the older one
+    // This is only to make the animation a bit prettier
     addNew(i) {
         const oldestIndex = this.lines.reduce((oldest, _, index) => {
-            return this.ages[index] > this.ages[oldest] ? index : oldest;
+            if ((this.ages[index] > this.ages[oldest])
+                || (this.ages[index] === this.ages[oldest]
+                    && index < oldest)) {
+                // Cacheline at 'index' is older than line at 'oldest'
+                return index;
+            } else {
+                return oldest;
+            }
         }, 0);
         this.addLine(oldestIndex, i);
     }
 
     queueMemoryAccess(i) {
         let instructions = this.getQueuedInstructions(i);
-        if (typeof instructions === "object" && instructions.length > 0) {
+        if (typeof instructions !== "undefined") {
             // Memory access at index i already queued
             // Copy the instruction and add to queue
             let instr = Object.assign(Instruction.empty(), instructions[0]);
