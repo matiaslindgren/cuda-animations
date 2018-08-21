@@ -39,9 +39,9 @@ const CONFIG = {
         kernelHighlightPalette: generatePaletteRGBA(2),
     },
     latencies: {
-        arithmetic: 5,
-        L2CacheAccess: 15,
-        memoryAccess: 40,
+        arithmetic: 1,
+        L2CacheAccess: 10,
+        memoryAccess: 60,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
@@ -75,8 +75,8 @@ const CONFIG = {
 };
 
 const CUDAKernels = {
-    minPath: {
-        displayName: "Minimum path",
+    ppcStep: {
+        displayName: "Shortcut step",
         kernelArgsN: 32,
         grid: {
             dimGrid: {
@@ -142,7 +142,7 @@ const CUDAKernels = {
         ],
     },
     trivial: {
-        displayName: "Trivial linear",
+        displayName: "Fully coalesced",
         kernelArgsN: 32,
         grid: {
             dimGrid: {
@@ -155,11 +155,17 @@ const CUDAKernels = {
             },
         },
         sourceLines: [
-            "__global__ void kernel(const float* input, int n) {",
+            "__global__ void kernel(float* output, const float* input, int n) {",
             "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
             "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
-            "    float x = input[n*i + j];",
-            "    float y = x + x;",
+            "    float v = HUGE_VALF;",
+            "    for (int k = 0; k < n; ++k) {",
+            "        float x = input[n*i + k];",
+            "        float y = input[n*j + k];",
+            "        float z = x + y;",
+            "        v = min(v, z);",
+            "    }",
+            "    output[n*i + j] = v;",
             "}",
         ],
         statements: [
@@ -170,10 +176,31 @@ const CUDAKernels = {
                 this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y);
             },
             function() {
-                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.j);
+                this.locals.v = this.identity(Infinity);
             },
             function() {
-                this.locals.y = this.arithmetic(this.locals.x + this.locals.x);
+                this.locals.k = this.identity(0);
+            },
+            function() {
+                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.k);
+            },
+            function() {
+                this.locals.y = this.arrayGet(this.args.input, this.args.n * this.locals.j + this.locals.k);
+            },
+            function() {
+                this.locals.z = this.arithmetic(this.locals.x + this.locals.y);
+            },
+            function() {
+                this.locals.v = this.arithmetic(Math.min(this.locals.v, this.locals.z));
+            },
+            function() {
+                ++this.locals.k;
+                if (this.locals.k < this.args.n) {
+                    this.jump(-5);
+                }
+            },
+            function() {
+                this.identity(0);
             },
         ],
     },

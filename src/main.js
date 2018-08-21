@@ -9,7 +9,7 @@ var prevRenderTime = performance.now();
 var drawing = true;
 
 // Choose default CUDA kernel from kernels defined in config.js
-var activeKernel = "minPath";
+var activeKernel = "ppcStep";
 
 function makeSMlistBody(count) {
     function liWrap(s) {
@@ -155,7 +155,7 @@ function initUI() {
         restart();
     });
     kernelSelect.addEventListener("change", event => {
-        pause();
+        drawing = false;
         activeKernel = event.target.value;
         restart();
     });
