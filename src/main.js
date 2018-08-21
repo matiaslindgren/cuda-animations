@@ -62,6 +62,24 @@ const kernelCallableStatements = [
     },
 ];
 
+function makeSMlistBody(count) {
+    function liWrap(s) {
+        return "<li>" + s + "</li>";
+    }
+
+    function SMcontentsToUL(body, ulID) {
+        return "<ul id=\"sm-state-" + ulID + "\">\n" + body.map(liWrap).join("\n") + "</ul>";
+    }
+
+    const defaultSMstateBody = [
+        "<pre>cycle <span class=\"sm-cycle-counter\">0</span></pre>",
+    ];
+    const liElements = Array.from(new Array(count), (_, i) => {
+        return liWrap(SMcontentsToUL(defaultSMstateBody, i + 1));
+    });
+    return liElements.join("\n");
+}
+
 function parseStyle(style, prop, unit) {
     if (typeof unit === "undefined") {
         unit = "px";
@@ -84,6 +102,9 @@ function resetSizeFromElement(source, target) {
 }
 
 function init() {
+    // Populate SM list contents
+    document.getElementById("sm-list").innerHTML = makeSMlistBody(CONFIG.SM.count);
+
     memoryCanvasInput = document.getElementById("memoryCanvasInput");
     //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
     kernelCanvas = document.getElementById("kernelCanvas");
