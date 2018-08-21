@@ -64,22 +64,22 @@ const CONFIG = {
         height: 105,
         colorRGBA: [100, 100, 100, 0.8],
     },
-    grid: {
-        dimGrid: {
-            x: Math.round(32/8),
-            y: Math.round(32/8),
-        },
-        dimBlock: {
-            x: 8,
-            y: 8
-        },
-    },
 };
 
 const CUDAKernels = {
     minPath: {
         displayName: "Minimum path",
         kernelArgsN: 32,
+        grid: {
+            dimGrid: {
+                x: Math.round(32/8),
+                y: Math.round(32/8),
+            },
+            dimBlock: {
+                x: 8,
+                y: 8
+            },
+        },
         sourceLines: [
             "__global__ void kernel(float* output, const float* input, int n) {",
             "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
@@ -136,6 +136,16 @@ const CUDAKernels = {
     trivial: {
         displayName: "Trivial",
         kernelArgsN: 32,
+        grid: {
+            dimGrid: {
+                x: Math.round(32/8),
+                y: Math.round(32/8),
+            },
+            dimBlock: {
+                x: 8,
+                y: 8
+            },
+        },
         sourceLines: [
             "__global__ void kernel(const float* input, int n) {",
             "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",

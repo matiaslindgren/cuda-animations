@@ -86,7 +86,7 @@ function init() {
 
     // Initialize simulated GPU
     device = new Device(memoryCanvasInput);
-    const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
+    const grid = new Grid(kernel.grid.dimGrid, kernel.grid.dimBlock);
     const kernelArgs = {
         output: function() { },
         input: device.memoryTransaction.bind(device, "get"),
