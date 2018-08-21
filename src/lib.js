@@ -35,8 +35,8 @@ class L2Cache {
     constructor() {
         // Cached device memory indexes.
         // All are offset by 1, since 0 represents empty cacheline
-        this.lines = new Uint16Array(CONFIG.cache.L2CacheLines);
-        this.ages = new Uint8Array(CONFIG.cache.L2CacheLines);
+        this.lines = new Uint32Array(CONFIG.cache.L2CacheLines);
+        this.ages = new Uint32Array(CONFIG.cache.L2CacheLines);
         // Amount of words (graphical slots) in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
