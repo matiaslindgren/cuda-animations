@@ -54,9 +54,9 @@ const CONFIG = {
         pendingStateRGBA: [60, 60, 240, 0.2],
     },
     SM: {
-        count: 3,
+        count: 2,
         warpSize: 32,
-        warpSchedulers: 1,
+        warpSchedulers: 2,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
         paddingX: 20,
