@@ -33,8 +33,13 @@ canvas {
     padding-left: 25px;
 }
 
-input[type=button] {
-    width: 80px;
+.menubar input[type=button],
+.menubar select {
+    min-height: 25px;
+    min-width: 75px;
+}
+
+.menubar select {
 }
 
 #kernelSource {

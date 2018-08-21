@@ -8,59 +8,8 @@ var device;
 var prevRenderTime = performance.now();
 var drawing = true;
 
-const kernelSourceLines = [
-    "__global__ void kernel(float* output, const float* input, int n) {",
-    "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
-    "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
-    "    float v = HUGE_VALF;",
-    "    for (int k = 0; k < n; ++k) {",
-    "        float x = input[n*i + k];",
-    "        float y = input[n*k + j];",
-    "        float z = x + y;",
-    "        v = min(v, z);",
-    "    }",
-    "    output[n*i + j] = v;",
-    "}",
-];
-
-// Closures that simulate the CUDA statements above
-// Each closure is applied with a CUDA context, which can then be referenced as 'this' in the closure
-const kernelCallableStatements = [
-    function() {
-        this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x);
-    },
-    function() {
-        this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y);
-    },
-    function() {
-        this.locals.v = this.identity(Infinity);
-    },
-    function() {
-        this.locals.k = this.identity(0);
-    },
-    function() {
-        this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.k);
-    },
-    function() {
-        this.locals.y = this.arrayGet(this.args.input, this.args.n * this.locals.k + this.locals.j);
-    },
-    function() {
-        this.locals.z = this.arithmetic(this.locals.x + this.locals.y);
-    },
-    function() {
-        this.locals.v = this.arithmetic(Math.min(this.locals.v, this.locals.z));
-    },
-    function() {
-        ++this.locals.k;
-        if (this.locals.k < this.args.n) {
-            this.jump(-5);
-        }
-    },
-    function() {
-        this.identity(0);
-        //this.arraySet(this.args.output, this.args.n * this.locals.i + this.locals.j, this.locals.v);
-    },
-];
+// Choose default CUDA kernel from kernels defined in config.js
+var activeKernel = "minPath";
 
 function makeSMlistBody(count) {
     function liWrap(s) {
@@ -78,6 +27,16 @@ function makeSMlistBody(count) {
         return liWrap(SMcontentsToUL(defaultSMstateBody, i + 1));
     });
     return liElements.join("\n");
+}
+
+function makeKernelSelectOptionsHTML(kernels) {
+    function makeOption(key) {
+        return "<option value=\"" + key + "\">" + kernels[key].displayName + "</option>";
+    }
+    // Create all kernels as options HTML, where the default kernel is first
+    const kernelsNoDefault = Object.keys(kernels).filter(k => k !== activeKernel);
+    const optionsHTML = Array.from([activeKernel].concat(kernelsNoDefault), makeOption);
+    return optionsHTML.join("\n");
 }
 
 function parseStyle(style, prop, unit) {
@@ -104,6 +63,8 @@ function resetSizeFromElement(source, target) {
 function init() {
     // Populate SM list contents
     document.getElementById("sm-list").innerHTML = makeSMlistBody(CONFIG.SM.count);
+    // Populate CUDA kernel selector
+    document.getElementById("kernel-select").innerHTML = makeKernelSelectOptionsHTML(CUDAKernels);
 
     memoryCanvasInput = document.getElementById("memoryCanvasInput");
     //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
@@ -112,9 +73,11 @@ function init() {
     // Initialize canvas element dimensions from computed stylesheet
     [memoryCanvasInput].forEach(canvas => resetSizeAttrsFromStyle(canvas));
 
+    // Choose default kernel
+    const kernel = CUDAKernels[activeKernel];
     // Render kernel source to set pre-element size
     const kernelSource = document.getElementById("kernelSource");
-    kernelSource.innerText = kernelSourceLines.join('\n');
+    kernelSource.innerText = kernel.sourceLines.join('\n');
     // Align kernel source highlighting over the pre-element containing the source
     resetSizeFromElement(kernelSource, kernelCanvas);
 
@@ -125,18 +88,17 @@ function init() {
     device = new Device(memoryCanvasInput);
     const grid = new Grid(CONFIG.grid.dimGrid, CONFIG.grid.dimBlock);
     const kernelArgs = {
-        //output: device.memoryTransaction.bind(device, "set"),
         output: function() { },
         input: device.memoryTransaction.bind(device, "get"),
-        n: CONFIG.memory.rowSlotCount,
+        n: kernel.kernelArgsN,
     };
     const program = {
-        sourceLines: kernelSourceLines,
+        sourceLines: kernel.sourceLines,
         sourceLineHeight: sourceLineHeight,
-        statements: kernelCallableStatements,
+        statements: kernel.statements,
         kernelArgs: kernelArgs,
     };
-    if (kernelSourceLines.length - 2 !== kernelCallableStatements.length) {
+    if (kernel.sourceLines.length - 2 !== kernel.statements.length) {
         console.error("WARNING: Inconsistent kernel source line count when compared to callable statements");
     }
     device.setProgram(grid, program);
@@ -181,14 +143,20 @@ function pause() {
 
 // Define menubar buttons for interacting with the animation
 function initUI() {
-    const pauseButton = document.querySelector("#pause-button");
-    const restartButton = document.querySelector("#restart-button");
+    const pauseButton = document.getElementById("pause-button");
+    const restartButton = document.getElementById("restart-button");
+    const kernelSelect = document.getElementById("kernel-select");
     pauseButton.addEventListener("click", _ => {
         pause();
         pauseButton.value = drawing ? "Pause" : "Continue";
     });
     restartButton.addEventListener("click", _ => {
         pauseButton.value = "Pause";
+        restart();
+    });
+    kernelSelect.addEventListener("change", event => {
+        pause();
+        activeKernel = event.target.value;
         restart();
     });
 }
