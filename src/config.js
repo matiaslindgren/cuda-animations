@@ -18,12 +18,14 @@ function printobj(o) {
 }
 
 function generatePaletteRGBA(shadeCount) {
-    const baseRGBA = [50, 50, 50, 0.15];
-    const shadeIncrement = (255 - 50) / shadeCount;
-    return Array.from(new Array(3), (_, component) => {
+    const baseRGBA = [20, 20, 20, 0.2];
+    // Set to non-zero if warp schedulers within an SM should have different shades of the SM color
+    // const shadeIncrement = 255 / shadeCount;
+    const shadeIncrement = 0;
+    return Array.from(new Array(2), (_, component) => {
         return Array.from(new Array(shadeCount), (_, shade) => {
             const color = baseRGBA.slice();
-            color[component] = 255 - Math.floor((shade + 1) * shadeIncrement);
+            color[component] = 255 - Math.floor(shade * shadeIncrement);
             return color;
         });
     });
@@ -34,7 +36,7 @@ const CONFIG = {
         // Delay in ms between rendering each frame
         drawDelayMS: 1000.0 / 400.0,
         SMCycleLabelSize: 20,
-        kernelHighlightPalette: generatePaletteRGBA(4),
+        kernelHighlightPalette: generatePaletteRGBA(2),
     },
     latencies: {
         arithmetic: 5,
