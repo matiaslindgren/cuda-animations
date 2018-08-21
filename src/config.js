@@ -31,9 +31,9 @@ const CONFIG = {
         kernelHighlightPalette: generatePaletteRGBA(4),
     },
     latencies: {
-        arithmetic: 10,
-        L2CacheAccess: 25,
-        memoryAccess: 100,
+        arithmetic: 5,
+        L2CacheAccess: 15,
+        memoryAccess: 40,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
@@ -49,14 +49,14 @@ const CONFIG = {
     cache: {
         // Size of a L2 cacheline in slots
         L2CacheLineSize: 8,
-        L2CacheLines: 16,
+        L2CacheLines: 4*8,
         cachedStateRGBA: [60, 60, 240, 0.5],
         pendingStateRGBA: [60, 60, 240, 0.2],
     },
     SM: {
-        count: 2,
+        count: 3,
         warpSize: 32,
-        warpSchedulers: 2,
+        warpSchedulers: 1,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
         paddingX: 20,
