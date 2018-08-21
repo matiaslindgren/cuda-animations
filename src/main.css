@@ -35,11 +35,9 @@ canvas {
 
 .menubar input[type=button],
 .menubar select {
+    font-family: monospace;
     min-height: 25px;
     min-width: 75px;
-}
-
-.menubar select {
 }
 
 #kernelSource {
@@ -55,8 +53,17 @@ canvas {
 }
 
 #memoryCanvasContainer {
-    height: 950px;
+    min-height: 550px;
 }
-#memoryCanvasContainer canvas {
-    height: 55%;
+
+.body-error-banner {
+    font-family: monospace;
+    height: 1em;
+    width: 100%;
+    text-align: center;
+    font-size: 120%;
+    color: black;
+    background-color: #fff363;
+    margin: 5px;
+    padding: 5px;
 }
