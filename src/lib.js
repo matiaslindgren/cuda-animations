@@ -251,7 +251,7 @@ class DeviceMemory extends Drawable {
     }
 }
 
-// One memory slot represents a single address in RAM that holds a single word
+// One memory slot represents a single address in RAM that holds a single 4-byte word
 class MemorySlot extends Drawable {
     constructor(index, value, ...drawableArgs) {
         super(...drawableArgs);
@@ -432,13 +432,61 @@ class Warp {
         ++this.programCounter;
     }
 
+    // Memory transactions can be coalesced into 32, 64 or 128 byte transactions [2].
+    // For simplicity, it is assumed that all addressable memory slots are 4 bytes.
+    // Then, adjacent indexes can be coalesced in chunks of 8, 16 and 32 indexes.
+    coalesceMemoryTransactions() {
+        // Reduction 1, align all memory access indexes from all threads to 32 bytes
+        let alignedIndexes = new Set;
+        this.threads.forEach(t => {
+            const index = t.instruction.data.index;
+            const aligned = index - index % 8;
+            alignedIndexes.add(aligned);
+        });
+        // Reduction 2, align results to 64 bytes
+        let alignedIndexes2 = new Set;
+        alignedIndexes.forEach(index => {
+            const aligned = index - index % 16;
+            alignedIndexes2.add(aligned);
+        });
+        // Reduction 3, align results to 128 bytes
+        alignedIndexes = new Set;
+        alignedIndexes2.forEach(index => {
+            const aligned = index - index % 32;
+            alignedIndexes.add(aligned);
+        });
+        // The amount of remaining indexes is the minimum amount of required memory transactions
+        const coalescedLatency = alignedIndexes.size * this.threads[0].instruction.cyclesLeft;
+        // Assign new latencies to device memory access instructions
+        this.threads.forEach(t => {
+            t.instruction.cyclesLeft = coalescedLatency;
+            // Coalesce only once per new device memory access instruction
+            t.instruction.data.coalesced = true;
+        });
+    }
+
     // All threads in a warp do one cycle in parallel
     cycle() {
         this.threads.forEach(t => t.cycle());
-        // inelegant jump instruction hack, assuming all threads have the same jump instruction at the same cycle
+        // Warp wide hacks
         const instr = this.threads[0].instruction;
-        if (instr !== null && instr.name === "jump" && !instr.isDone()) {
-            this.programCounter += instr.data.jumpOffset;
+        if (instr !== null && !instr.isDone()) {
+            switch (instr.name) {
+                // Inelegant jump instruction hack, assuming all threads have the same jump instruction at the same cycle
+                case "jump":
+                    assert(this.threads.every(t => t.instruction.name === "jump"), "only warp wide jump instructions supported");
+                    this.programCounter += instr.data.jumpOffset;
+                    break;
+                // If the warp threads are doing a memory access, simulate possible coalescing latency
+                case "deviceMemoryAccess":
+                    assert(this.threads.every(t => t.instruction.name === "deviceMemoryAccess"), "device memory accesses must be warp wide");
+                    assert(this.threads.every(t => t.instruction.cyclesLeft === this.threads[0].instruction.cyclesLeft), "warp wide device memory accesses must all have same latency");
+                    // Coalesce all memory accesses if not already coalesced
+                    if (!this.threads[0].instruction.data.coalesced) {
+                        this.coalesceMemoryTransactions();
+                    }
+                    break;
+            }
         }
     }
 }

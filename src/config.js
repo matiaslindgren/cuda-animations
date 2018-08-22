@@ -40,8 +40,8 @@ const CONFIG = {
     },
     latencies: {
         arithmetic: 1,
-        L2CacheAccess: 10,
-        memoryAccess: 60,
+        L2CacheAccess: 5,
+        memoryAccess: 20,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
