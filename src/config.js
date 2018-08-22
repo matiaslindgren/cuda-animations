@@ -18,7 +18,7 @@ function printobj(o) {
 }
 
 function generatePaletteRGBA(shadeCount) {
-    const baseRGBA = [20, 20, 20, 0.2];
+    const baseRGBA = [20, 20, 20, 0.15];
     // Set shadeIncrement to non-zero if warp schedulers within an SM should have different shades of the SM color
     // const shadeIncrement = 255 / shadeCount;
     const shadeIncrement = 0;
@@ -34,14 +34,14 @@ function generatePaletteRGBA(shadeCount) {
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 400.0,
+        drawDelayMS: 1000.0 / 200.0,
         SMCycleLabelSize: 20,
         kernelHighlightPalette: generatePaletteRGBA(2),
     },
     latencies: {
         arithmetic: 1,
-        L2CacheAccess: 5,
-        memoryAccess: 20,
+        L2CacheAccess: 4,
+        memoryAccess: 8,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
@@ -160,8 +160,8 @@ const CUDAKernels = {
             "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
             "    float v = HUGE_VALF;",
             "    for (int k = 0; k < n; ++k) {",
-            "        float x = input[n*i + k];",
-            "        float y = input[n*j + k];",
+            "        float x = input[n*k + i];",
+            "        float y = input[n*k + j];",
             "        float z = x + y;",
             "        v = min(v, z);",
             "    }",
@@ -182,10 +182,10 @@ const CUDAKernels = {
                 this.locals.k = this.identity(0);
             },
             function() {
-                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.i + this.locals.k);
+                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.k + this.locals.i);
             },
             function() {
-                this.locals.y = this.arrayGet(this.args.input, this.args.n * this.locals.j + this.locals.k);
+                this.locals.y = this.arrayGet(this.args.input, this.args.n * this.locals.k + this.locals.j);
             },
             function() {
                 this.locals.z = this.arithmetic(this.locals.x + this.locals.y);

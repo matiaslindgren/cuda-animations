@@ -301,7 +301,7 @@ class MemorySlot extends Drawable {
             if (--this.hotness === 0) {
                 this.fillRGBA = this.defaultColor.slice();
             } else {
-                this.fillRGBA[3] -= this.coolDownStep;
+                this.fillRGBA[3] = Math.max(this.cachedColor[3] - this.coolDownStep, this.fillRGBA[3] - this.coolDownStep);
             }
         }
     }
@@ -455,6 +455,7 @@ class Warp {
             const aligned = index - index % 32;
             alignedIndexes.add(aligned);
         });
+        assert(alignedIndexes.size > 0 && alignedIndexes.size < 32);
         // The amount of remaining indexes is the minimum amount of required memory transactions
         const coalescedLatency = alignedIndexes.size * this.threads[0].instruction.cyclesLeft;
         // Assign new latencies to device memory access instructions
