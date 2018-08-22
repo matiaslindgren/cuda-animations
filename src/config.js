@@ -19,7 +19,7 @@ function printobj(o) {
 
 function generatePaletteRGBA(shadeCount) {
     const baseRGBA = [20, 20, 20, 0.2];
-    // Set to non-zero if warp schedulers within an SM should have different shades of the SM color
+    // Set shadeIncrement to non-zero if warp schedulers within an SM should have different shades of the SM color
     // const shadeIncrement = 255 / shadeCount;
     const shadeIncrement = 0;
     return Array.from(new Array(2), (_, component) => {

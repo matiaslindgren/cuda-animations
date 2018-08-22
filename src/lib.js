@@ -148,7 +148,9 @@ class L2Cache {
     }
 }
 
-// Namespace object for kernel simulation
+// Namespace object for kernel simulation and encapsulation of various hardware state.
+// CUDA statements should be evaluated with Function.prototype.apply, using a CUDAKernelContext object as an argument.
+// As a side effect, this creates an Instruction object into the context object.
 class CUDAKernelContext {
     constructor() {
         this.locals = {};
@@ -168,10 +170,8 @@ class CUDAKernelContext {
         this.prevInstruction = null;
     }
 
-    assertDefined(x, f) {
-        assert(typeof x !== "undefined" && !Number.isNaN(x),
-            "Failed to evaluate \"" + f + "\" statement due to undefined kernel context variable. Please check that every variable in every statement is defined.");
-    }
+    // one line for easier automatic exclusion
+    assertDefined(x, f) { assert(typeof x !== "undefined" && !Number.isNaN(x), "Failed to evaluate \"" + f + "\" statement due to undefined kernel context variable. Please check that every variable in every statement is defined."); }
 
     // Identity function with 1 cycle latency
     identity(x) {
