@@ -12,19 +12,23 @@ var drawing = true;
 var activeKernel = "ppcStep";
 
 function makeSMlistBody(count) {
-    function liWrap(s) {
-        return "<li>" + s + "</li>";
+    function liWrap(s, liID) {
+        if (typeof liID === "undefined") {
+            return "<li>" + s + "</li>";
+        } else {
+            return "<li id=\"sm-state-" + liID + "\">" + s + "</li>";
+        }
     }
 
-    function SMcontentsToUL(body, ulID) {
-        return "<ul id=\"sm-state-" + ulID + "\">\n" + body.map(liWrap).join("\n") + "</ul>";
+    function SMcontentsToUL(body) {
+        return "<ul>" + body.map(liWrap).join("\n") + "</ul>";
     }
 
     const defaultSMstateBody = [
         "<pre>cycle <span class=\"sm-cycle-counter\">0</span></pre>",
     ];
     const liElements = Array.from(new Array(count), (_, i) => {
-        return liWrap(SMcontentsToUL(defaultSMstateBody, i + 1));
+        return liWrap(SMcontentsToUL(defaultSMstateBody), i + 1);
     });
     return liElements.join("\n");
 }
@@ -85,12 +89,12 @@ function init() {
     const sourceLineHeight = parseStyle(sourceStyle, "line-height", "em");
 
     // Initialize simulated GPU
-    device = new Device(memoryCanvasInput);
+    device = new Device(memoryCanvasInput, smCount);
     const grid = new Grid(kernel.grid.dimGrid, kernel.grid.dimBlock);
     const kernelArgs = {
         output: function() { },
         input: device.memoryTransaction.bind(device, "get"),
-        n: kernel.kernelArgsN,
+        n: kernel.kernelArgsN || 0,
     };
     const program = {
         sourceLines: kernel.sourceLines,
@@ -124,6 +128,10 @@ function draw(now) {
     clear(kernelCanvas);
     device.step();
     if (device.programTerminated()) {
+        clear(memoryCanvasInput);
+        device.clear();
+        device.step();
+        clear(kernelCanvas);
         pause();
     }
 }

@@ -534,15 +534,24 @@ class Instruction {
 }
 
 class SMstats {
-    constructor(stateElement) {
+    constructor(stateElement, processorID) {
         this.stateElement = stateElement;
-        this.cycleCounter = stateElement.querySelector("li pre span.sm-cycle-counter");
+        this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1][0]);
+        this.cycleCounter = stateElement.querySelector("ul li pre span.sm-cycle-counter");
         this.cycles = 0;
     }
 
     cycle() {
         ++this.cycles;
         this.cycleCounter.innerHTML = this.cycles.toString();
+    }
+
+    terminate() {
+        this.setColor([200, 200, 200, 0.25]);
+    }
+
+    setColor(color) {
+        this.stateElement.style.backgroundColor = "rgba(" + color.join(',') + ')';
     }
 }
 
@@ -555,7 +564,7 @@ class SMController {
         this.activeBlock = null;
         this.kernelArgs = null;
         const stateElement = document.getElementById("sm-state-" + id);
-        this.statsWidget = new SMstats(stateElement);
+        this.statsWidget = new SMstats(stateElement, id);
     }
 
     // Free all resident warps and take next available block from the grid
@@ -698,9 +707,9 @@ class StreamingMultiprocessor {
 
 // Wrapper around the device memory and multiprocessors, simulating memory access handling and scheduling
 class Device {
-    constructor(memoryCanvas) {
+    constructor(memoryCanvas, smCount) {
         this.memory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
-        this.multiprocessors = this.createProcessors(CONFIG.SM.count);
+        this.multiprocessors = this.createProcessors(smCount);
         this.kernelSource = null;
         this.L2Cache = new L2Cache();
     }
@@ -753,7 +762,7 @@ class Device {
         this.memory.step(L2CacheStateHandle);
         this.multiprocessors.forEach((sm, smIndex) => {
             sm.step();
-            sm.controller.residentWarps.forEach((warp, warpIndex) => {
+            Array.from(sm.controller.scheduledWarps()).forEach((warp, warpIndex) => {
                 const colorIndex = {x: warpIndex, y: smIndex};
                 const lineno = warp.programCounter;
                 this.kernelSource.setHighlight(colorIndex, lineno);
