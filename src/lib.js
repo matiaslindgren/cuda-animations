@@ -449,6 +449,15 @@ class Warp {
     // For simplicity, it is assumed that all addressable memory slots are 4 bytes.
     // Then, adjacent indexes can be coalesced in chunks of 8, 16 and 32 indexes.
     coalesceMemoryTransactions() {
+        // Do not coalesce again if warp is currently waiting for a coalesced memory access
+        const isCoalesced = this.threads.some(t => {
+            assert(typeof t.instruction.data !== "undefined", "attempting to coalesce memory transactions, but warp threads do not have data attributes attached to instructions");
+            const data = t.instruction.data;
+            return (typeof data.coalesced !== "undefined" && data.coalesced);
+        });
+        if (isCoalesced) {
+            return;
+        }
         // Reduction 1, align all memory access indexes from all threads to 32 bytes
         let alignedIndexes = new Set;
         this.threads.forEach(t => {
@@ -493,12 +502,10 @@ class Warp {
                     break;
                 // If the warp threads are doing a memory access, simulate possible coalescing latency
                 case "deviceMemoryAccess":
-                    assert(this.threads.every(t => t.instruction.name === "deviceMemoryAccess"), "device memory accesses must be warp wide");
-                    assert(this.threads.every(t => t.instruction.cyclesLeft === this.threads[0].instruction.cyclesLeft), "warp wide device memory accesses must all have same latency");
+                case "cachedMemoryAccess":
+                    assert(this.threads.every(t => t.instruction.name === "deviceMemoryAccess" || t.instruction.name === "cachedMemoryAccess"), "device memory accesses must be warp wide", {name: "Warp.threads", obj: this.threads});
                     // Coalesce all memory accesses if not already coalesced
-                    if (!this.threads[0].instruction.data.coalesced) {
-                        this.coalesceMemoryTransactions();
-                    }
+                    this.coalesceMemoryTransactions();
                     break;
             }
         }
