@@ -145,6 +145,11 @@ class L2Cache {
             return "notInCache";
         }
     }
+
+    clear() {
+        this.lines.fill(0);
+        this.ages.fill(0);
+    }
 }
 
 // Namespace object for kernel simulation and encapsulation of various hardware state.
@@ -248,6 +253,10 @@ class DeviceMemory extends Drawable {
         });
         super.draw();
     }
+
+    clear() {
+        this.slots.forEach(slot => slot.clear());
+    }
 }
 
 // One memory slot represents a single address in RAM that holds a single 4-byte word
@@ -298,11 +307,16 @@ class MemorySlot extends Drawable {
         this.draw();
         if (this.hotness > 0) {
             if (--this.hotness === 0) {
-                this.fillRGBA = this.defaultColor.slice();
+                this.clear();
             } else {
                 this.fillRGBA[3] = Math.max(this.cachedColor[3] - this.coolDownStep, this.fillRGBA[3] - this.coolDownStep);
             }
         }
+    }
+
+    clear() {
+        this.hotness = 0;
+        this.fillRGBA = this.defaultColor.slice();
     }
 }
 
@@ -768,6 +782,12 @@ class Device {
             });
         });
         this.kernelSource.step();
+    }
+
+    // Revert memory cell state colors
+    clear() {
+        this.memory.clear();
+        this.multiprocessors.forEach(sm => sm.controller.statsWidget.terminate(true));
     }
 }
 
