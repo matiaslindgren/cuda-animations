@@ -41,7 +41,6 @@ class L2Cache {
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
         // Each element is an array of instructions, all waiting for the same index
-        // TODO simulate throughtput limit from bus width here
         this.memoryAccessQueue = new Array();
     }
 
@@ -695,7 +694,7 @@ class StreamingMultiprocessor {
 
     // Animation loop step
     step() {
-        if (Math.random() < 0.1) {
+        if (Math.random() < CONFIG.SM.latencyNoiseProb) {
             // Simulated latency within this SM for the duration of a single animation frame
             return;
         }
