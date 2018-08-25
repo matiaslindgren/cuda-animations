@@ -63,9 +63,15 @@ const CONFIG = {
         pendingStateRGBA: [60, 60, 240, 0.2],
     },
     SM: {
-        count: 2,
+        count: {
+            default: 2,
+            min: 1,
+            max: 4,
+        },
         warpSize: 32,
-        warpSchedulers: 2,
+        warpSchedulers: 1,
+        // Probability of simulating SM latency by skipping a cycle
+        latencyNoiseProb: 0.1,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
         paddingX: 20,

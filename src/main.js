@@ -10,6 +10,8 @@ var drawing = true;
 
 // Choose default CUDA kernel from kernels defined in config.js
 var activeKernel = "ppcStep";
+// Amount of streaming multiprocessors in device
+var smCount = CONFIG.SM.count.default;
 
 function makeSMlistBody(count) {
     function liWrap(s, liID) {
@@ -43,6 +45,14 @@ function makeKernelSelectOptionsHTML(kernels) {
     return optionsHTML.join("\n");
 }
 
+function makeSMCountSelectOptionsHTML(config) {
+    function makeOption(key) {
+        return '<option value="' + key + '"' + ((key === smCount) ? 'selected' : '') + '>' + key + ' SMs</option>';
+    }
+    let optionsHTML = Array.from(new Array(config.max - config.min + 1), (_, i) => makeOption(i + config.min));
+    return optionsHTML.join("\n");
+}
+
 function parseStyle(style, prop, unit) {
     if (typeof unit === "undefined") {
         unit = "px";
@@ -65,10 +75,13 @@ function resetSizeFromElement(source, target) {
 }
 
 function init() {
-    // Populate SM list contents
-    document.getElementById("sm-list").innerHTML = makeSMlistBody(CONFIG.SM.count);
-    // Populate CUDA kernel selector
+    // Populate UI elements
+    // SM list contents
+    document.getElementById("sm-list").innerHTML = makeSMlistBody(smCount);
+    // CUDA kernel selector
     document.getElementById("kernel-select").innerHTML = makeKernelSelectOptionsHTML(CUDAKernels);
+    // Streaming multiprocessor count selector
+    document.getElementById("sm-count-select").innerHTML = makeSMCountSelectOptionsHTML(CONFIG.SM.count);
 
     memoryCanvasInput = document.getElementById("memoryCanvasInput");
     //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
@@ -154,6 +167,7 @@ function initUI() {
     const pauseButton = document.getElementById("pause-button");
     const restartButton = document.getElementById("restart-button");
     const kernelSelect = document.getElementById("kernel-select");
+    const smCountSelect = document.getElementById("sm-count-select");
     pauseButton.addEventListener("click", _ => {
         pause();
         pauseButton.value = drawing ? "Pause" : "Continue";
@@ -165,6 +179,11 @@ function initUI() {
     kernelSelect.addEventListener("change", event => {
         drawing = false;
         activeKernel = event.target.value;
+        restart();
+    });
+    smCountSelect.addEventListener("change", event => {
+        drawing = false;
+        smCount = parseInt(event.target.value);
         restart();
     });
 }
