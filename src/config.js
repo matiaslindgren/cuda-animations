@@ -144,64 +144,36 @@ const CUDAKernels = {
     },
     trivial: {
         displayName: "Fully coalesced",
-        kernelArgsN: 32,
         grid: {
             dimGrid: {
-                x: Math.round(32/8),
-                y: Math.round(32/8),
+                x: 1,
+                y: 32,
             },
             dimBlock: {
-                x: 8,
-                y: 8
+                x: 32,
+                y: 1,
             },
         },
         sourceLines: [
-            "__global__ void kernel(float* output, const float* input, int n) {",
-            "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
-            "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
-            "    float v = HUGE_VALF;",
-            "    for (int k = 0; k < n; ++k) {",
-            "        float x = input[n*k + i];",
-            "        float y = input[n*k + j];",
-            "        float z = x + y;",
-            "        v = min(v, z);",
-            "    }",
-            "    output[n*i + j] = v;",
+            "__global__ void kernel(float* output, const float* input) {",
+            "    const float c = 2.0;",
+            "    const int i = threadIdx.x + blockIdx.y * blockDim.x;",
+            "    float x = input[i];",
+            "    output[i] = c * x;",
             "}",
         ],
         statements: [
             function() {
-                this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x);
+                this.locals.c = this.identity(2.0);
             },
             function() {
-                this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y);
+                this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x);
             },
             function() {
-                this.locals.v = this.identity(Infinity);
+                this.locals.x = this.arrayGet(this.args.input, this.locals.i);
             },
             function() {
-                this.locals.k = this.identity(0);
-            },
-            function() {
-                this.locals.x = this.arrayGet(this.args.input, this.args.n * this.locals.k + this.locals.i);
-            },
-            function() {
-                this.locals.y = this.arrayGet(this.args.input, this.args.n * this.locals.k + this.locals.j);
-            },
-            function() {
-                this.locals.z = this.arithmetic(this.locals.x + this.locals.y);
-            },
-            function() {
-                this.locals.v = this.arithmetic(Math.min(this.locals.v, this.locals.z));
-            },
-            function() {
-                ++this.locals.k;
-                if (this.locals.k < this.args.n) {
-                    this.jump(-5);
-                }
-            },
-            function() {
-                this.identity(0);
+                this.arithmetic(this.locals.c * this.locals.x);
             },
         ],
     },
