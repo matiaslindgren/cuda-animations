@@ -85,9 +85,6 @@ const CONFIG = {
         latencyNoiseProb: 0.05,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
-        paddingX: 20,
-        paddingY: 20,
-        height: 105,
     },
 };
 

@@ -554,11 +554,11 @@ class Instruction {
 }
 
 class SMstats {
-    constructor(stateElement, processorID) {
-        this.stateElement = stateElement;
-        this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1]);
+    constructor(processorID) {
+        this.stateElement = document.getElementById("sm-state-" + processorId);
         this.cycleCounter = stateElement.querySelector("ul li pre span.sm-cycle-counter");
         this.cycles = 0;
+        this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1]);
     }
 
     cycle() {
@@ -583,8 +583,7 @@ class SMController {
         this.program = null;
         this.activeBlock = null;
         this.kernelArgs = null;
-        const stateElement = document.getElementById("sm-state-" + id);
-        this.statsWidget = new SMstats(stateElement, id);
+        this.statsWidget = new SMstats(id);
     }
 
     // Free all resident warps and take next available block from the grid

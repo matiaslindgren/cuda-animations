@@ -20,6 +20,14 @@ ul.sm-list > li {
     padding-bottom: 15px;
 }
 
+ul.sm-list li ul li pre {
+    margin: 0;
+}
+
+ul.sm-list li ul li {
+    padding: 3px;
+}
+
 li {
     list-style: none;
 }

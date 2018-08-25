@@ -23,7 +23,7 @@ function makeSMlistBody(count) {
     }
 
     function SMcontentsToUL(body) {
-        return "<ul>" + body.map(liWrap).join("\n") + "</ul>";
+        return "<ul>" + Array.from(body, li => liWrap(li)).join("\n") + "</ul>";
     }
 
     const defaultSMstateBody = [
