@@ -714,15 +714,11 @@ class SMController {
 
 class StreamingMultiprocessor {
     constructor(id) {
-        this.frameCounter = 0;
-        this.framesPerCycle = CONFIG.SM.framesPerSMCycle;
-        assert(this.framesPerCycle > 0, "frames per SM cycle must be at least 1");
         this.controller = new SMController(id);
     }
 
     // Simulate one processor cycle
     cycle() {
-        this.frameCounter = 0;
         if (this.controller.program !== null) {
             this.controller.cycle();
         }
@@ -734,9 +730,7 @@ class StreamingMultiprocessor {
             // Simulated latency within this SM for the duration of a single animation frame
             return;
         }
-        if (++this.frameCounter === this.framesPerCycle) {
-            this.cycle();
-        }
+        this.cycle();
     }
 }
 

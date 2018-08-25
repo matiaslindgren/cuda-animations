@@ -44,8 +44,6 @@ function get4Palette(key) {
 
 const CONFIG = {
     animation: {
-        // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 400.0,
         // Array of colors for highlighting kernel source lines and SMs
         kernelHighlightPalette: get4Palette("rgba-colorful"),
     },
@@ -64,7 +62,7 @@ const CONFIG = {
         slotSize: 14,
         slotFillRGBA: [100, 100, 100, 0.15],
         // Amount of animation steps of the cooldown transition after touching a memory index
-        coolDownPeriod: 10,
+        coolDownPeriod: 15,
     },
     cache: {
         // Size of a L2 cacheline in slots
@@ -84,8 +82,6 @@ const CONFIG = {
         // Probability of skipping an SM cycle (for simulating hardware latency)
         // Setting this to 0 makes all SMs to execute in unison
         latencyNoiseProb: 0.05,
-        // The amount of animation render frames simulating one multiprocessor cycle
-        framesPerSMCycle: 1,
     },
 };
 
