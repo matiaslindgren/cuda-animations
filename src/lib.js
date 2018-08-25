@@ -556,7 +556,7 @@ class Instruction {
 class SMstats {
     constructor(stateElement, processorID) {
         this.stateElement = stateElement;
-        this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1][0]);
+        this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1]);
         this.cycleCounter = stateElement.querySelector("ul li pre span.sm-cycle-counter");
         this.cycles = 0;
     }
@@ -792,11 +792,10 @@ class Device {
         this.memory.step(L2CacheStateHandle);
         this.multiprocessors.forEach((sm, smIndex) => {
             sm.step();
-            Array.from(sm.controller.scheduledWarps()).forEach((warp, warpIndex) => {
-                const colorIndex = {x: warpIndex, y: smIndex};
+            for (let warp of sm.controller.nonTerminatedWarps()) {
                 const lineno = warp.programCounter;
-                this.kernelSource.setHighlight(colorIndex, lineno);
-            });
+                this.kernelSource.setHighlight(smIndex, lineno);
+            }
         });
         this.kernelSource.step();
     }
@@ -818,16 +817,13 @@ class KernelSource {
             const y = lineno * lineHeight;
             const width = kernelCanvas.width;
             return {
-                queue: new Array,
-                colors: Array.from(palette, shades => {
-                    return Array.from(shades, highlightColor => {
-                        const hlDrawable = new Drawable(x, y, width, lineHeight, kernelCanvas, undefined, highlightColor);
-                        return {
-                            drawable: hlDrawable,
-                        };
-                    });
+                queue: [],
+                colors: Array.from(palette, color => {
+                    return {
+                        drawable: new Drawable(x, y, width, lineHeight, kernelCanvas, undefined, color),
+                    };
                 }),
-            }
+            };
         });
     }
 
@@ -846,8 +842,7 @@ class KernelSource {
             // Highlight all queued colors
             line.queue.forEach((colorIndex, queueIndex) => {
                 // Offset all colors and render first colors in queue at the bottom
-                assert(colorIndex.x === 0, colorIndex.x);
-                const drawable = line.colors[colorIndex.y][colorIndex.x].drawable;
+                const drawable = line.colors[colorIndex].drawable;
                 const prevY = drawable.y;
                 const prevHeight = drawable.height;
                 drawable.y += (stackedColorCount - queueIndex - 1) * prevHeight/stackedColorCount

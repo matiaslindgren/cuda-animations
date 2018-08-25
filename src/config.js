@@ -24,25 +24,29 @@ function printobj(o) {
 }
 
 
+function get4Palette(key) {
+    switch(key) {
+        case "rgba-colorful":
+            const alpha = 0.25;
+            return [
+                [35, 196, 1, alpha],
+                [47, 21, 162, alpha],
+                [227, 1, 23, alpha],
+                [235, 190, 2, alpha],
+            ];
+        default:
+            failHard();
+            console.error("unknown palette key: " + key);
+    }
+}
+
+
 const CONFIG = {
     animation: {
         // Delay in ms between rendering each frame
-        drawDelayMS: 1000.0 / 200.0,
-        SMCycleLabelSize: 20,
-        kernelHighlightPalette: [
-            [
-                [255, 166, 0, 0.45],
-            ],
-            [
-                [83, 29, 255, 0.45],
-            ],
-            [
-                [255, 211, 0, 0.45],
-            ],
-            [
-                [0, 255, 255, 0.45],
-            ],
-        ],
+        drawDelayMS: 1000.0 / 400.0,
+        // Array of colors for highlighting kernel source lines and SMs
+        kernelHighlightPalette: get4Palette("rgba-colorful"),
     },
     latencies: {
         arithmetic: 1,
