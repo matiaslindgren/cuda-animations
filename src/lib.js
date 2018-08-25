@@ -557,6 +557,7 @@ class SMstats {
     constructor(processorID) {
         this.stateElement = document.getElementById("sm-state-" + processorId);
         this.cycleCounter = stateElement.querySelector("ul li pre span.sm-cycle-counter");
+        this.blockIdxSpan = stateElement.querySelector("ul li pre span.sm-current-block-idx");
         this.cycles = 0;
         this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1]);
     }
@@ -564,6 +565,10 @@ class SMstats {
     cycle() {
         ++this.cycles;
         this.cycleCounter.innerHTML = this.cycles.toString();
+    }
+
+    setActiveBlock(block) {
+        this.blockIdxSpan.innerHTML = block ? "(x: " + block.idx.x + ", y:" + block.idx.y + ")" : 'none';
     }
 
     terminate() {
@@ -597,6 +602,7 @@ class SMController {
         this.activeBlock = newBlock;
         this.activeBlock.locked = true;
         this.residentWarps = Array.from(this.activeBlock.asWarps(this.kernelArgs));
+        this.statsWidget.setActiveBlock(this.activeBlock);
         return true;
     }
 

@@ -27,7 +27,8 @@ function makeSMlistBody(count) {
     }
 
     const defaultSMstateBody = [
-        "<pre>cycle <span class=\"sm-cycle-counter\">0</span></pre>",
+        '<pre>cycle <span class="sm-cycle-counter">0</span></pre>',
+        '<pre>block <span class="sm-current-block-idx">none</span></pre>',
     ];
     const liElements = Array.from(new Array(count), (_, i) => {
         return liWrap(SMcontentsToUL(defaultSMstateBody), i + 1);
