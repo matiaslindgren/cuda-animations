@@ -144,7 +144,9 @@ const CUDAKernels = {
             function() {
                 ++this.locals.k;
                 if (this.locals.k < this.args.n) {
-                    this.jump(-5);
+                    // Jump instructions take an integer line offset as parameter
+                    // In this case, -4 jumps to the function that assigns to this.locals.x
+                    this.jump(-4);
                 }
             },
             function() {

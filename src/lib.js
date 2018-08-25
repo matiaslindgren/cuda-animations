@@ -489,7 +489,7 @@ class Warp {
                 // Inelegant jump instruction hack, assuming all threads have the same jump instruction at the same cycle
                 case "jump":
                     assert(this.threads.every(t => t.instruction.name === "jump"), "only warp wide jump instructions supported");
-                    this.programCounter += instr.data.jumpOffset;
+                    this.programCounter += instr.data.jumpOffset + Math.sign(instr.data.jumpOffset);
                     break;
                 // If the warp threads are doing a memory access, simulate possible coalescing latency
                 case "deviceMemoryAccess":
