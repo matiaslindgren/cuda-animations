@@ -637,24 +637,38 @@ class SMController {
                 yield warp;
     }
 
+    nextFreeWarp() {
+        return this.freeWarps().next().value;
+    }
+
+    nextBlockingWarp() {
+        return this.blockingWarps().next().value;
+    }
+
+    // Return true if the warp scheduler can take an active warp for execution
+    shouldSchedule() {
+        return Array.from(this.scheduledWarps()).length < this.schedulerCount;
+    }
+
     // Replace waiting warps with active warps
     scheduleWarps() {
-        let blockingWarps = Array.from(this.blockingWarps());
-        let freeWarps = Array.from(this.freeWarps());
-        let scheduledCount = Array.from(this.scheduledWarps()).length;
-        if (scheduledCount < this.schedulerCount) {
-            let replaceCount = this.schedulerCount - scheduledCount;
-            for (let i = 0; i < replaceCount; ++i) {
-                freeWarps[i].running = true;
+        let assertLoopCount = 0;
+        while (this.shouldSchedule()) {
+            if (assertLoopCount++ > 100) { assert(false, "failed to schedule next warp", {name: "resident warps", obj: this.residentWarps}); }
+            const freeWarp = this.nextFreeWarp();
+            if (freeWarp) {
+                freeWarp.running = true;
+                continue;
+            } else {
+                const blockingWarp = this.nextBlockingWarp();
+                if (blockingWarp) {
+                    blockingWarp.running = false;
+                    continue;
+                }
             }
-        } else {
-            let replaceCount = Math.min(freeWarps.length, blockingWarps.length);
-            for (let i = 0; i < replaceCount; ++i) {
-                blockingWarps[i].running = false;
-                freeWarps[i].running = true;
-            }
+            // Warp has no free or blocked warps, cannot schedule
+            break;
         }
-        assert(Array.from(this.scheduledWarps()).length === this.schedulerCount, "After scheduling warps, the SM should contain exactly " + this.schedulerCount + " active warps.");
     }
 
     updateProgramCounters() {
