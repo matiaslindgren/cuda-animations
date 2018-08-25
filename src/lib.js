@@ -41,7 +41,7 @@ class L2Cache {
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
         // Each element is an array of instructions, all waiting for the same index
-        this.memoryAccessQueue = new Array();
+        this.memoryAccessQueue = [];
     }
 
     align(i) {
@@ -268,10 +268,10 @@ class MemorySlot extends Drawable {
         this.hotness = 0;
         // Copy default color
         this.defaultColor = this.fillRGBA.slice();
-        this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
-        this.coolDownStep = (1.0 - this.defaultColor[3]) / this.coolDownPeriod;
         this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
         this.pendingColor = CONFIG.cache.pendingStateRGBA.slice();
+        this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
+        this.coolDownStep = (1.0 - this.cachedColor[3]) / (this.coolDownPeriod + 1);
     }
 
     // Simulate a memory access to this index
@@ -309,7 +309,7 @@ class MemorySlot extends Drawable {
             if (--this.hotness === 0) {
                 this.clear();
             } else {
-                this.fillRGBA[3] = Math.max(this.cachedColor[3] - this.coolDownStep, this.fillRGBA[3] - this.coolDownStep);
+                this.fillRGBA[3] -= this.coolDownStep;
             }
         }
     }
@@ -356,13 +356,13 @@ class Block {
             console.error("Uneven block size, unable to divide block evenly into warps");
             return;
         }
-        let threadIndexes = new Array;
+        let threadIndexes = [];
         for (let j = 0; j < this.dim.y; ++j) {
             for (let i = 0; i < this.dim.x; ++i) {
                 threadIndexes.push({x: i, y: j});
                 if (threadIndexes.length === warpSize) {
                     const warp = new Warp(this, threadIndexes.slice(), kernelArgs);
-                    threadIndexes = new Array;
+                    threadIndexes = [];
                     yield warp;
                 }
             }
@@ -578,7 +578,7 @@ class SMstats {
 class SMController {
     constructor(id) {
         this.schedulerCount = CONFIG.SM.warpSchedulers;
-        this.residentWarps = new Array();
+        this.residentWarps = [];
         this.grid = null;
         this.program = null;
         this.activeBlock = null;
@@ -851,7 +851,7 @@ class KernelSource {
                 drawable.y = prevY;
                 drawable.height = prevHeight;
             });
-            line.queue = new Array;
+            line.queue = [];
         });
     }
 

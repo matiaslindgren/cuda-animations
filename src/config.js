@@ -48,10 +48,11 @@ const CONFIG = {
         // Array of colors for highlighting kernel source lines and SMs
         kernelHighlightPalette: get4Palette("rgba-colorful"),
     },
+    // Simulated latency in cycles for different instruction types
     latencies: {
-        arithmetic: 1,
+        arithmetic: 2,
         L2CacheAccess: 4,
-        memoryAccess: 8,
+        memoryAccess: 16,
     },
     memory: {
         // Amount of indexable memory slots on each row and column
@@ -62,14 +63,14 @@ const CONFIG = {
         slotSize: 14,
         slotFillRGBA: [100, 100, 100, 0.15],
         // Amount of animation steps of the cooldown transition after touching a memory index
-        coolDownPeriod: 15,
+        coolDownPeriod: 10,
     },
     cache: {
         // Size of a L2 cacheline in slots
         L2CacheLineSize: 8,
-        L2CacheLines: 4*8,
-        cachedStateRGBA: [60, 60, 240, 0.5],
-        pendingStateRGBA: [60, 60, 240, 0.2],
+        L2CacheLines: 8*8,
+        cachedStateRGBA: [60, 60, 200, 0.5],
+        pendingStateRGBA: [60, 60, 200, 0.2],
     },
     SM: {
         count: {
@@ -78,15 +79,15 @@ const CONFIG = {
             max: 4,
         },
         warpSize: 32,
-        warpSchedulers: 1,
-        // Probability of simulating SM latency by skipping a cycle
-        latencyNoiseProb: 0.1,
+        warpSchedulers: 2,
+        // Probability of skipping an SM cycle (for simulating hardware latency)
+        // Setting this to 0 makes all SMs to execute in unison
+        latencyNoiseProb: 0.05,
         // The amount of animation render frames simulating one multiprocessor cycle
         framesPerSMCycle: 1,
         paddingX: 20,
         paddingY: 20,
         height: 105,
-        colorRGBA: [100, 100, 100, 0.8],
     },
 };
 
