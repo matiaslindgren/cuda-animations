@@ -5,8 +5,8 @@ var memoryCanvasInput;
 //var memoryCanvasOutput;
 var kernelCanvas;
 var device;
-var prevRenderTime = performance.now();
 var drawing = true;
+var prevRenderFrameID;
 
 // Choose default CUDA kernel from kernels defined in config.js
 var activeKernel = "ppcStep";
@@ -75,7 +75,35 @@ function resetSizeFromElement(source, target) {
     target.style.height = target.height.toString() + "px";
 }
 
-function init() {
+// Define menubar buttons for interacting with the animation
+function initUI() {
+    const pauseButton = document.getElementById("pause-button");
+    const restartButton = document.getElementById("restart-button");
+    const kernelSelect = document.getElementById("kernel-select");
+    const smCountSelect = document.getElementById("sm-count-select");
+    pauseButton.addEventListener("click", _ => {
+        pause();
+        pauseButton.value = drawing ? "Pause" : "Continue";
+    });
+    restartButton.addEventListener("click", _ => {
+        pauseButton.value = "Pause";
+        restart();
+    });
+    kernelSelect.addEventListener("change", event => {
+        drawing = false;
+        activeKernel = event.target.value;
+        pauseButton.value = "Pause";
+        restart();
+    });
+    smCountSelect.addEventListener("change", event => {
+        drawing = false;
+        smCount = parseInt(event.target.value);
+        pauseButton.value = "Pause";
+        restart();
+    });
+}
+
+function initSimulation() {
     // Populate UI elements
     // SM list contents
     document.getElementById("sm-list").innerHTML = makeSMlistBody(smCount);
@@ -128,65 +156,41 @@ function clear(canvas) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function cancelDraw() {
+    window.cancelAnimationFrame(prevRenderFrameID);
+}
+
+function queueDraw() {
+    prevRenderFrameID = window.requestAnimationFrame(draw);
+}
+
 function draw(now) {
-    if (drawing) {
-        window.requestAnimationFrame(draw);
-    }
-    if (!drawing || now - prevRenderTime < CONFIG.animation.drawDelayMS) {
-        // Throttle rendering speed to avoid choking the CPU
-        return;
-    }
-    prevRenderTime = now;
     clear(memoryCanvasInput);
     //clear(memoryCanvasOutput);
     clear(kernelCanvas);
     device.step();
     if (device.programTerminated()) {
-        clear(memoryCanvasInput);
-        device.clear();
-        device.step();
         clear(kernelCanvas);
-        pause();
+        drawing = false;
+    }
+    if (drawing) {
+        queueDraw();
     }
 }
 
 function restart() {
-    init();
+    drawing = false;
+    cancelDraw();
+    initSimulation();
     drawing = true;
-    window.requestAnimationFrame(draw);
+    queueDraw();
 }
 
 function pause() {
     drawing = !drawing;
     if (drawing) {
-        window.requestAnimationFrame(draw);
+        queueDraw();
     }
-}
-
-// Define menubar buttons for interacting with the animation
-function initUI() {
-    const pauseButton = document.getElementById("pause-button");
-    const restartButton = document.getElementById("restart-button");
-    const kernelSelect = document.getElementById("kernel-select");
-    const smCountSelect = document.getElementById("sm-count-select");
-    pauseButton.addEventListener("click", _ => {
-        pause();
-        pauseButton.value = drawing ? "Pause" : "Continue";
-    });
-    restartButton.addEventListener("click", _ => {
-        pauseButton.value = "Pause";
-        restart();
-    });
-    kernelSelect.addEventListener("change", event => {
-        drawing = false;
-        activeKernel = event.target.value;
-        restart();
-    });
-    smCountSelect.addEventListener("change", event => {
-        drawing = false;
-        smCount = parseInt(event.target.value);
-        restart();
-    });
 }
 
 document.addEventListener("DOMContentLoaded", _ => {

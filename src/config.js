@@ -5,6 +5,7 @@ function failHard() {
     const errorBanner = document.getElementById("body-error-banner");
     errorBanner.innerHTML = "Something went wrong, please see the developer console";
     errorBanner.hidden = false;
+    cancelDraw();
 }
 
 function assert(expr, msg, state) {
