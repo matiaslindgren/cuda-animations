@@ -7,15 +7,20 @@ function failHard() {
     errorBanner.hidden = false;
 }
 
-function assert(expr, msg) {
+function assert(expr, msg, state) {
     if (!expr) {
         failHard();
-        throw "ASSERTION FAILED: " + msg;
+        console.error("ASSERTION FAILED");
+        if (typeof state !== "undefined") {
+            console.error(state.name + " was:");
+            printobj(state.obj);
+        }
+        throw "AssertionError: " + msg;
     }
 }
 
 function printobj(o) {
-    console.log(JSON.stringify(o));
+    console.log(JSON.stringify(o, null, 2));
 }
 
 
