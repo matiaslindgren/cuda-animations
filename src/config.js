@@ -9,6 +9,7 @@ function failHard() {
 
 function assert(expr, msg) {
     if (!expr) {
+        failHard();
         throw "ASSERTION FAILED: " + msg;
     }
 }
