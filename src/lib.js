@@ -630,28 +630,24 @@ class SMController {
                 yield warp;
     }
 
-    // Replace warps waiting for instructions to complete with active warps
+    // Replace waiting warps with active warps
     scheduleWarps() {
-        const activeWarpCount = Array.from(this.freeWarps()).length;
-        let scheduledWarpCount = Array.from(this.scheduledWarps()).length;
-        let remainingWaiting = Math.min(this.schedulerCount, activeWarpCount);
-        while (remainingWaiting-- > 0) {
-            // Schedule first free warp
-            for (let warp of this.freeWarps()) {
-                // Schedule warp for execution in SM
-                warp.running = true;
-                ++scheduledWarpCount;
-                break;
+        let blockingWarps = Array.from(this.blockingWarps());
+        let freeWarps = Array.from(this.freeWarps());
+        let scheduledCount = Array.from(this.scheduledWarps()).length;
+        if (scheduledCount < this.schedulerCount) {
+            let replaceCount = this.schedulerCount - scheduledCount;
+            for (let i = 0; i < replaceCount; ++i) {
+                freeWarps[i].running = true;
             }
-            // If too many warps are executing, remove one
-            if (scheduledWarpCount > this.schedulerCount) {
-                for (let warp of this.blockingWarps()) {
-                    warp.running = false;
-                    --scheduledWarpCount;
-                    break;
-                }
+        } else {
+            let replaceCount = Math.min(freeWarps.length, blockingWarps.length);
+            for (let i = 0; i < replaceCount; ++i) {
+                blockingWarps[i].running = false;
+                freeWarps[i].running = true;
             }
         }
+        assert(Array.from(this.scheduledWarps()).length === this.schedulerCount, "After scheduling warps, the SM should contain exactly " + this.schedulerCount + " active warps.");
     }
 
     updateProgramCounters() {
@@ -829,6 +825,7 @@ class KernelSource {
             // Highlight all queued colors
             line.queue.forEach((colorIndex, queueIndex) => {
                 // Offset all colors and render first colors in queue at the bottom
+                assert(colorIndex.x === 0, colorIndex.x);
                 const drawable = line.colors[colorIndex.y][colorIndex.x].drawable;
                 const prevY = drawable.y;
                 const prevHeight = drawable.height;
