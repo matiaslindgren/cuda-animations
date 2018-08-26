@@ -67,7 +67,12 @@ const CONFIG = {
     cache: {
         // Size of a L2 cacheline in slots
         L2CacheLineSize: 8,
-        L2CacheLines: 8*8,
+        L2CacheLines: {
+            default: 5*8,
+            min: 1*8,
+            max: 8*8,
+            increment: 8,
+        },
         cachedStateRGBA: [60, 60, 200, 0.5],
         pendingStateRGBA: [60, 60, 200, 0.2],
     },

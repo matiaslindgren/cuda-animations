@@ -32,11 +32,13 @@ class Drawable {
 // Simulated device memory accesses through L2.
 // LRU for convenience and neat visual appearance, although Mei and Chu [1] suggest the L2 replacement policy is not LRU
 class L2Cache {
-    constructor() {
+    constructor(linesCount) {
         // Cached device memory indexes.
         // All are offset by 1, since 0 represents empty cacheline
-        this.lines = new Uint32Array(CONFIG.cache.L2CacheLines);
-        this.ages = new Uint32Array(CONFIG.cache.L2CacheLines);
+        this.lines = new Array(linesCount);
+        this.ages = new Array(linesCount);
+        // Fill with zeros
+        this.clear();
         // Amount of words (graphical slots) in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
@@ -736,11 +738,11 @@ class StreamingMultiprocessor {
 
 // Wrapper around the device memory and multiprocessors, simulating memory access handling and scheduling
 class Device {
-    constructor(memoryCanvas, smCount) {
+    constructor(memoryCanvas, smCount, cacheLines) {
         this.memory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
         this.multiprocessors = this.createProcessors(smCount);
         this.kernelSource = null;
-        this.L2Cache = new L2Cache();
+        this.L2Cache = new L2Cache(cacheLines);
     }
 
     // Initialize all processors with new program

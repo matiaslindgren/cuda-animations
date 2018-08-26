@@ -12,6 +12,8 @@ var prevRenderFrameID;
 var activeKernel = "ppcStep";
 // Amount of streaming multiprocessors in device
 var smCount = CONFIG.SM.count.default;
+// Amount of cache lines
+var cacheLineCount = CONFIG.cache.L2CacheLines.default;
 
 function makeSMlistBody(count) {
     function liWrap(s, liID) {
@@ -28,7 +30,7 @@ function makeSMlistBody(count) {
 
     const defaultSMstateBody = [
         '<pre>cycle <span class="sm-cycle-counter">0</span></pre>',
-        '<pre>block <span class="sm-current-block-idx">none</span></pre>',
+        '<pre>block <span class="sm-current-block-idx">&ltnone&gt</span></pre>',
     ];
     const liElements = Array.from(new Array(count), (_, i) => {
         return liWrap(SMcontentsToUL(defaultSMstateBody), i + 1);
@@ -51,6 +53,17 @@ function makeSMCountSelectOptionsHTML(config) {
         return '<option value="' + key + '"' + ((key === smCount) ? 'selected' : '') + '>' + key + ' SMs</option>';
     }
     let optionsHTML = Array.from(new Array(config.max - config.min + 1), (_, i) => makeOption(i + config.min));
+    return optionsHTML.join("\n");
+}
+
+function makeCacheSizeSelectOptionsHTML(config) {
+    function makeOption(key) {
+        return '<option value="' + key + '"' + ((key === cacheLineCount) ? 'selected' : '') + '>' + key + ' cache lines</option>';
+    }
+    let optionsHTML = [];
+    for (let i = 0; i < config.max - config.min + 1; i += config.increment) {
+        optionsHTML.push(makeOption(i + config.min));
+    }
     return optionsHTML.join("\n");
 }
 
@@ -81,6 +94,7 @@ function initUI() {
     const restartButton = document.getElementById("restart-button");
     const kernelSelect = document.getElementById("kernel-select");
     const smCountSelect = document.getElementById("sm-count-select");
+    const cacheSizeSelect = document.getElementById("cache-size-select");
     pauseButton.addEventListener("click", _ => {
         pause();
         pauseButton.value = drawing ? "Pause" : "Continue";
@@ -101,6 +115,12 @@ function initUI() {
         pauseButton.value = "Pause";
         restart();
     });
+    cacheSizeSelect.addEventListener("change", event => {
+        drawing = false;
+        cacheLineCount = parseInt(event.target.value);
+        pauseButton.value = "Pause";
+        restart();
+    });
 }
 
 function initSimulation() {
@@ -111,6 +131,8 @@ function initSimulation() {
     document.getElementById("kernel-select").innerHTML = makeKernelSelectOptionsHTML(CUDAKernels);
     // Streaming multiprocessor count selector
     document.getElementById("sm-count-select").innerHTML = makeSMCountSelectOptionsHTML(CONFIG.SM.count);
+    // Cache size selector
+    document.getElementById("cache-size-select").innerHTML = makeCacheSizeSelectOptionsHTML(CONFIG.cache.L2CacheLines);
 
     memoryCanvasInput = document.getElementById("memoryCanvasInput");
     //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
@@ -131,7 +153,7 @@ function initSimulation() {
     const sourceLineHeight = parseStyle(sourceStyle, "line-height", "em");
 
     // Initialize simulated GPU
-    device = new Device(memoryCanvasInput, smCount);
+    device = new Device(memoryCanvasInput, smCount, cacheLineCount);
     const grid = new Grid(kernel.grid.dimGrid, kernel.grid.dimBlock);
     const kernelArgs = {
         output: function() { },
