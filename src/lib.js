@@ -624,10 +624,17 @@ class SMController {
                 yield warp;
     }
 
+    // Return a generator of all active warps
+    *activeWarps() {
+        for (let warp of this.nonTerminatedWarps())
+            if (warp.isActive())
+                yield warp;
+    }
+
     // Return a generator of all free warps, available for scheduling
     *freeWarps() {
-        for (let warp of this.nonTerminatedWarps())
-            if (warp.isActive() && !warp.running)
+        for (let warp of this.activeWarps())
+            if (!warp.running)
                 yield warp;
     }
 
@@ -653,15 +660,26 @@ class SMController {
         return this.blockingWarps().next().value;
     }
 
-    // Return true if the warp scheduler can take an active warp for execution
-    shouldSchedule() {
-        return Array.from(this.scheduledWarps()).length < this.schedulerCount;
+    generatorLength(generator) {
+        let count = 0;
+        for (let _ of generator) {
+            ++count;
+        }
+        return count;
+    }
+
+    scheduledWarpsCount() {
+        return this.generatorLength(this.scheduledWarps());
+    }
+
+    activeWarpsCount() {
+        return this.generatorLength(this.activeWarps());
     }
 
     // Replace waiting warps with active warps
     scheduleWarps() {
         let assertLoopCount = 0;
-        while (this.shouldSchedule()) {
+        while (this.scheduledWarpsCount() < this.schedulerCount) {
             if (assertLoopCount++ > 100) { assert(false, "failed to schedule next warp", {name: "resident warps", obj: this.residentWarps}); }
             const freeWarp = this.nextFreeWarp();
             if (freeWarp) {
