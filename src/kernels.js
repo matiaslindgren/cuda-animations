@@ -249,8 +249,8 @@ const CUDAKernels = {
         },
         grid: {
             dimGrid: {
-                x: Math.round(32/8),
-                y: Math.round(32/8),
+                x: 2,
+                y: 2,
             },
             dimBlock: {
                 x: 8,
