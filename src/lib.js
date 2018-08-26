@@ -179,7 +179,7 @@ class CUDAKernelContext {
     // one line for easier automatic exclusion
     assertDefined(x, f) { assert(typeof x !== "undefined" && !Number.isNaN(x), "Failed to evaluate \"" + f + "\" statement due to undefined kernel context variable. Please check that every variable in every statement is defined."); }
 
-    // Identity function with 1 cycle latency
+    // Identity function with no latency
     identity(x) {
         this.assertDefined(x, "identity");
         this.prevInstruction = Instruction.identity();
@@ -537,7 +537,7 @@ class Instruction {
     }
 
     static identity() {
-        return new Instruction("identity", 1);
+        return new Instruction("identity", 0);
     }
 
     static arithmetic() {
