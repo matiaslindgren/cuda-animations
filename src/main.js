@@ -192,6 +192,9 @@ function draw(now) {
     clear(kernelCanvas);
     device.step();
     if (device.programTerminated()) {
+        device.clear();
+        clear(memoryCanvasInput);
+        device.step();
         clear(kernelCanvas);
         drawing = false;
     }

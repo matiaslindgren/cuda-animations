@@ -279,7 +279,7 @@ class MemorySlot extends Drawable {
     // Simulate a memory access to this index
     touch() {
         this.hotness = this.coolDownPeriod;
-        this.fillRGBA[3] = 1.0;
+        this.fillRGBA[3] = 0.9;
     }
 
     // Update slot cache status to highlight cached slots in rendering
@@ -566,15 +566,16 @@ class SMstats {
 
     cycle() {
         ++this.cycles;
-        this.cycleCounter.innerHTML = this.cycles.toString();
+        this.cycleCounter.innerHTML = this.cycles;
     }
 
     setActiveBlock(block) {
-        this.blockIdxSpan.innerHTML = block ? "(x: " + block.idx.x + ", y:" + block.idx.y + ")" : 'none';
+        this.blockIdxSpan.innerHTML = block ? "(x: " + block.idx.x + ", y:" + block.idx.y + ")" : '&ltnone&gt';
     }
 
     terminate() {
         this.setColor([200, 200, 200, 0.25]);
+        this.setActiveBlock(null);
     }
 
     setColor(color) {
@@ -804,7 +805,7 @@ class Device {
     // Revert memory cell state colors
     clear() {
         this.memory.clear();
-        this.multiprocessors.forEach(sm => sm.controller.statsWidget.terminate(true));
+        this.multiprocessors.forEach(sm => sm.controller.statsWidget.terminate());
     }
 }
 

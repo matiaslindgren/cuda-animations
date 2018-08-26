@@ -25,7 +25,7 @@ ul.sm-list li ul li pre {
 }
 
 ul.sm-list li ul li {
-    padding: 3px;
+    padding-bottom: 1px;
 }
 
 li {

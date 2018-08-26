@@ -62,7 +62,7 @@ const CONFIG = {
         slotSize: 14,
         slotFillRGBA: [100, 100, 100, 0.15],
         // Amount of animation steps of the cooldown transition after touching a memory index
-        coolDownPeriod: 15,
+        coolDownPeriod: 8,
     },
     cache: {
         // Size of a L2 cacheline in slots
