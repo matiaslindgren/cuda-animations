@@ -9,7 +9,7 @@ var drawing = true;
 var prevRenderFrameID;
 
 // Choose default CUDA kernel from kernels.js
-var activeKernel = "ppcStep";
+var activeKernel = "ppcStepV0";
 // Amount of streaming multiprocessors in device
 var smCount = CONFIG.SM.count.default;
 // Amount of cache lines
@@ -155,11 +155,10 @@ function initSimulation() {
     // Initialize simulated GPU
     device = new Device(memoryCanvasInput, smCount, cacheLineCount);
     const grid = new Grid(kernel.grid.dimGrid, kernel.grid.dimBlock);
-    const kernelArgs = {
+    const kernelArgs = Object.assign(kernel.kernelArgs, {
         output: function() { },
         input: device.memoryTransaction.bind(device, "get"),
-        n: kernel.kernelArgsN || 0,
-    };
+    });
     const program = {
         sourceLines: kernel.sourceLines,
         sourceLineHeight: sourceLineHeight,
@@ -167,7 +166,7 @@ function initSimulation() {
         kernelArgs: kernelArgs,
     };
     if (kernel.sourceLines.length - 2 !== kernel.statements.length) {
-        console.error("WARNING: Inconsistent kernel source line count when compared to callable statements");
+        console.error("WARNING: Inconsistent kernel source line count when compared to callable statements, expected " + (kernel.statements.length) + " source lines but got " + (kernel.sourceLines.length - 2));
     }
     device.setProgram(grid, program);
 }
