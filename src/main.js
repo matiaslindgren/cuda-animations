@@ -8,7 +8,7 @@ var device;
 var drawing = true;
 var prevRenderFrameID;
 
-// Choose default CUDA kernel from kernels defined in config.js
+// Choose default CUDA kernel from kernels.js
 var activeKernel = "ppcStep";
 // Amount of streaming multiprocessors in device
 var smCount = CONFIG.SM.count.default;
