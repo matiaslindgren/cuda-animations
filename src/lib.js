@@ -186,7 +186,7 @@ class CUDAKernelContext {
         return x;
     }
 
-    // Simulated arithmetic instruction
+    // Simulated arithmetic instruction no latency
     arithmetic(result) {
         this.assertDefined(result, "arithmetic");
         // Create latency
@@ -493,9 +493,9 @@ class Warp {
     // All threads in a warp do one cycle in parallel
     cycle() {
         this.threads.forEach(t => t.cycle());
-        // Warp wide hacks
         const instr = this.threads[0].instruction;
         if (instr !== null && !instr.isDone()) {
+            // Warp wide hacks
             switch (instr.name) {
                 // Inelegant jump instruction hack, assuming all threads have the same jump instruction at the same cycle
                 case "jump":
@@ -511,15 +511,26 @@ class Warp {
                     break;
             }
         }
+        if (instr.cyclesLeft < 0) {
+            assert(this.threads.every(t => t.instruction.cyclesLeft < 0), "either all or no threads in a warp have a zero-latency instruction");
+            // Manually override instruction latency,
+            // this is to signal the warp simulation it can execute another instruction within the current cycle
+            this.threads.forEach(t => t.instruction.cyclesLeft = 0);
+            return false;
+        }
+        return true;
     }
 }
 
 // Simulated latency after an SM issued instruction
+// latency > 0 : instruction that requires 'latency' amount of SM cycles to complete
+// latency = 0 : instruction is complete
+// latency < 0 : instruction is a zero latency instruction, which can be executed an arbitrary amount of times within an SM cycle
 class Instruction {
-    constructor(name, latency) {
+    constructor(name, latency, data) {
         this.name = name;
-        this.cyclesLeft = latency;
-        this.data = {};
+        this.cyclesLeft = latency || 0;
+        this.data = data || {};
     }
 
     isDone() {
@@ -532,12 +543,18 @@ class Instruction {
         }
     }
 
+    // Dummy instruction with zero latency
     static empty() {
         return new Instruction("empty", 0);
     }
 
+    // Identity instruction with no latency, which is distinct from zero latency in that warps can execute an arbitrary amount of no latency instructions per cycle
     static identity() {
-        return new Instruction("identity", 0);
+        return new Instruction("identity", -1);
+    }
+
+    static jump(offset) {
+        return new Instruction("jump", -1, {jumpOffset: offset});
     }
 
     static arithmetic() {
@@ -549,9 +566,7 @@ class Instruction {
     }
 
     static deviceMemoryAccess(i) {
-        const instr = new Instruction("deviceMemoryAccess", CONFIG.latencies.memoryAccess);
-        instr.data = {index: i};
-        return instr;
+        return new Instruction("deviceMemoryAccess", CONFIG.latencies.memoryAccess, {index: i});
     }
 }
 
@@ -660,6 +675,10 @@ class SMController {
         return this.blockingWarps().next().value;
     }
 
+    hasNonTerminatedWarps() {
+        return !this.nonTerminatedWarps().next().done;
+    }
+
     generatorLength(generator) {
         let count = 0;
         for (let _ of generator) {
@@ -717,11 +736,16 @@ class SMController {
     cycle() {
         this.statsWidget.cycle();
         this.scheduleWarps();
-        this.updateProgramCounters();
-        const nonTerminatedWarps = Array.from(this.nonTerminatedWarps());
-        if (nonTerminatedWarps.length > 0) {
-            // Warps available for execution
-            nonTerminatedWarps.forEach(warp => warp.cycle());
+        // Execute warps until an instruction requiring at least one cycle has been executed
+        if (this.hasNonTerminatedWarps()) {
+            let isDone = false;
+            while (!isDone) {
+                isDone = true;
+                this.updateProgramCounters();
+                for (let warp of this.nonTerminatedWarps()) {
+                    isDone = warp.cycle();
+                }
+            }
         } else {
             // All warps have terminated, try to take next block from grid
             this.releaseProcessedBlock();
