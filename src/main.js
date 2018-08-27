@@ -88,6 +88,13 @@ function resetSizeFromElement(source, target) {
     target.style.height = target.height.toString() + "px";
 }
 
+function resetSize(element, newWidth, newHeight) {
+    element.width = newWidth;
+    element.height = newHeight;
+    element.style.width = element.width.toString() + "px";
+    element.style.height = element.height.toString() + "px";
+}
+
 // Define menubar buttons for interacting with the animation
 function initUI() {
     const pauseButton = document.getElementById("pause-button");
@@ -138,9 +145,6 @@ function initSimulation() {
     //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");
     kernelCanvas = document.getElementById("kernelCanvas");
 
-    // Initialize canvas element dimensions from computed stylesheet
-    [memoryCanvasInput].forEach(canvas => resetSizeAttrsFromStyle(canvas));
-
     // Choose default kernel
     const kernel = CUDAKernels[activeKernel];
     // Render kernel source to set pre-element size
@@ -153,7 +157,7 @@ function initSimulation() {
     const sourceLineHeight = parseStyle(sourceStyle, "line-height", "em");
 
     // Initialize simulated GPU
-    device = new Device(memoryCanvasInput, smCount, cacheLineCount);
+    device = new Device(memoryCanvasInput, smCount, cacheLineCount, kernel.memory.input);
     const grid = new Grid(kernel.grid.dimGrid, kernel.grid.dimBlock);
     const kernelArgs = Object.assign(kernel.kernelArgs, {
         output: function() { },
@@ -169,6 +173,13 @@ function initSimulation() {
         console.error("WARNING: Inconsistent kernel source line count when compared to callable statements, expected " + (kernel.statements.length) + " source lines but got " + (kernel.sourceLines.length - 2));
     }
     device.setProgram(grid, program);
+
+    // Resize memory canvas and its container depending on the input array size
+    const memoryCanvasContainer = document.getElementById("memoryCanvasContainer");
+    const canvasWidth = kernel.memory.input.columns * (CONFIG.memory.slotPadding + CONFIG.memory.slotSize);
+    const canvasHeight = kernel.memory.input.rows * (CONFIG.memory.slotPadding + CONFIG.memory.slotSize);
+    resetSize(memoryCanvasInput, canvasWidth, canvasHeight);
+    resetSize(memoryCanvasContainer, canvasWidth, memoryCanvasContainer.height + canvasHeight);
 }
 
 function clear(canvas) {

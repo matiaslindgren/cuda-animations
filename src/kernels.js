@@ -208,6 +208,12 @@ const CUDAKernels = {
         kernelArgs: {
             n: 32,
         },
+        memory: {
+            input: {
+                rows: 32,
+                columns: 32,
+            },
+        },
         grid: {
             dimGrid: {
                 x: Math.round(32/8),
@@ -227,6 +233,12 @@ const CUDAKernels = {
         kernelArgs: {
             n: 32,
         },
+        memory: {
+            input: {
+                rows: 32,
+                columns: 32,
+            },
+        },
         grid: {
             dimGrid: {
                 x: Math.round(32/8),
@@ -245,7 +257,12 @@ const CUDAKernels = {
         displayName: "Shortcut step v2",
         kernelArgs: {
             n: 32,
-            nn: 32*32,
+        },
+        memory: {
+            input: {
+                rows: 64,
+                columns: 32,
+            },
         },
         grid: {
             dimGrid: {
@@ -263,6 +280,7 @@ const CUDAKernels = {
 
     trivial: {
         displayName: "Fully coalesced",
+        kernelArgs: {},
         grid: {
             dimGrid: {
                 x: 1,
@@ -271,6 +289,12 @@ const CUDAKernels = {
             dimBlock: {
                 x: 32,
                 y: 1,
+            },
+        },
+        memory: {
+            input: {
+                rows: 32,
+                columns: 32,
             },
         },
         sourceLines: [

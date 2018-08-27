@@ -54,12 +54,9 @@ const CONFIG = {
         memoryAccess: 16,
     },
     memory: {
-        // Amount of indexable memory slots on each row and column
-        rowSlotCount: 32,
-        columnSlotCount: 32,
         // Empty space between each slot on all sides
         slotPadding: 1,
-        slotSize: 14,
+        slotSize: 16,
         slotFillRGBA: [150, 150, 150, 0.1],
         // Amount of animation steps of the cooldown transition after touching a memory index
         coolDownPeriod: 8,

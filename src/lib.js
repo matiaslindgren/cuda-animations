@@ -218,27 +218,27 @@ class CUDAKernelContext {
     // Jump from current line by offset
     jump(offset) {
         this.assertDefined(offset, "jump");
-        const instr = new Instruction("jump", 1);
-        instr.data = {jumpOffset: offset};
-        this.prevInstruction = instr;
+        this.prevInstruction = Instruction.jump(offset);
     }
 }
 
 // Drawable, simulated area of GPU DRAM.
 // Several DeviceMemory instances can be defined, e.g. for representing an input and output array
 class DeviceMemory extends Drawable {
-    constructor(x, y, width, height, canvas) {
-        super(x, y, width, height, canvas);
-        const rowSlotCount = CONFIG.memory.rowSlotCount;
-        const columnSlotCount = CONFIG.memory.columnSlotCount;
+    constructor(x, y, canvas, inputDim) {
+        const rows = inputDim.rows;
+        const columns = inputDim.columns;
         const slotSize = CONFIG.memory.slotSize;
         const slotPadding = CONFIG.memory.slotPadding;
+        const width = columns * slotSize + slotPadding * columns;
+        const height = rows * slotSize + slotPadding * rows;
+        super(x, y, width, height, canvas);
         const slotFillRGBA = CONFIG.memory.slotFillRGBA;
         this.slots = Array.from(
-            new Array(rowSlotCount * columnSlotCount),
+            new Array(columns * rows),
             (_, i) => {
-                const slotX = x + (i % rowSlotCount) * (slotSize + slotPadding);
-                const slotY = y + Math.floor(i / rowSlotCount) * (slotSize + slotPadding);
+                const slotX = x + (i % columns) * (slotSize + slotPadding);
+                const slotY = y + Math.floor(i / columns) * (slotSize + slotPadding);
                 return new MemorySlot(i, 2, slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
             }
         );
@@ -757,8 +757,8 @@ class StreamingMultiprocessor {
 
 // Wrapper around the device memory and multiprocessors, simulating memory access handling and scheduling
 class Device {
-    constructor(memoryCanvas, smCount, cacheLines) {
-        this.memory = new DeviceMemory(0, 0, memoryCanvas.width, memoryCanvas.height, memoryCanvas);
+    constructor(memoryCanvas, smCount, cacheLines, input) {
+        this.memory = new DeviceMemory(0, 0, memoryCanvas, input);
         this.multiprocessors = this.createProcessors(smCount);
         this.kernelSource = null;
         this.L2Cache = new L2Cache(cacheLines);
