@@ -63,13 +63,13 @@ function() { this.identity(0); },
 ];
 
 const ppcStepV2Lines = [
-"__global__ void kernel(float* output, const float* input, int n, int nn) {",
+"__global__ void kernel(float* output, const float* input, int n) {",
 "    const int ia = threadIdx.x;",
 "    const int ja = threadIdx.y;",
 "    const int ic = blockIdx.x;",
 "    const int jc = blockIdx.y;",
 " ",
-"    const float* t = d + nn * nn;",
+"    const float* t = d + n * n;",
 " ",
 "    float v[8]v[8];",
 "    for (int ib = 0; ib < 8; ++ib) {",
@@ -82,11 +82,11 @@ const ppcStepV2Lines = [
 "        float y[8];",
 "        for (int ib = 0; ib < 8; ++ib) {",
 "            int i = ic * 64 + ib * 8 + ia;",
-"            x[ib] = t[nn*k + i];",
+"            x[ib] = t[n*k + i];",
 "        }",
 "        for (int jb = 0; jb < 8; ++jb) {",
 "            int j = jc * 64 + jb * 8 + ja;",
-"            y[jb] = d[nn*k + j];",
+"            y[jb] = d[n*k + j];",
 "        }",
 "        for (int ib = 0; ib < 8; ++ib) {",
 "            for (int jb = 0; jb < 8; ++jb) {",
@@ -110,7 +110,7 @@ function() { this.locals.ja = this.identity(this.threadIdx.y); },
 function() { this.locals.ic = this.identity(this.blockIdx.x); },
 function() { this.locals.jc = this.identity(this.blockIdx.y); },
 function() { this.identity(null); },
-function() { this.locals.t = this.identity(null); }, // FIXME pointer to input, needs array handle
+function() { this.locals.t = this.identity("arrayHandle"); },
 function() { this.identity(null); },
 function() { this.locals.v = this.identity(Array.from(new Array(8), _ => new Array(8))); },
 function() { this.locals.ib = this.identity(0); },
@@ -137,13 +137,12 @@ function() {
 function() {
     const ib = this.locals.ib;
     assert(ib < 8, "ib too large");
-    const nn = this.args.nn;
+    const n = this.args.n;
     const k = this.locals.k;
     assert(k < 32, "k too large");
     const i = this.locals.i;
     const x = this.locals.x;
-    x[ib] = this.arithmetic(nn*k + i); // FIXME array get from input t
-    //x[ib] = this.arrayGet(nn*k + i);
+    x[ib] = this.arrayGet(this.args.input, n*n + n*k + i); // Get from t
 },
 function() { if (++this.locals.ib < 8) { this.jump(-2); } else { this.locals.ib = undefined; } },
 function() { this.locals.jb = this.identity(0); },
@@ -156,12 +155,12 @@ function() {
 },
 function() {
     const jb = this.locals.jb;
-    const nn = this.args.nn;
+    const n = this.args.n;
     const k = this.locals.k;
     assert(k < 32, "k too large");
     const j = this.locals.j;
     const y = this.locals.y;
-    y[jb] = this.arithmetic(nn*k + j); // FIXME array get from input d
+    y[jb] = this.arrayGet(this.args.input, n*k + j); // Get from d
 },
 function() { if (++this.locals.jb < 8) { this.jump(-2); } else { this.locals.jb = undefined; } },
 function() { this.locals.ib = this.identity(0); },
