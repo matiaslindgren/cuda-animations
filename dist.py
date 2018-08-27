@@ -1,12 +1,15 @@
 """
-"Build" js source files by removing all lines containing the string "assert".
+Move source files to a build dir, while removing all lines containing some strings such as "assert".
 """
 import argparse
 import os
 
 SOURCE_FILES = (
-    "src/main.js",
-    "src/lib.js",
+    ("src/main.js", "assert"),
+    ("src/lib.js", "assert"),
+    ("src/config.js", ''),
+    ("src/kernels.js", ''),
+    ("src/main.css", ''),
 )
 
 if __name__ == "__main__":
@@ -18,12 +21,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not os.path.exists(args.build_dir):
         os.mkdir(args.build_dir)
-    for src in SOURCE_FILES:
+    for src, drop_string in SOURCE_FILES:
         with open(src) as f:
             lines = f.readlines()
         dst = os.path.join(args.build_dir, os.path.basename(src))
         with open(dst, "w") as f:
             for line in lines:
-                if "assert" in line:
+                if drop_string and drop_string in line:
                     continue
                 f.write(line)
