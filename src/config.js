@@ -49,9 +49,9 @@ const CONFIG = {
     },
     // Simulated latency in cycles for different instruction types
     latencies: {
-        arithmetic: 2,
-        L2CacheAccess: 4,
-        memoryAccess: 16,
+        arithmetic: 1,
+        L2CacheAccess: 8,
+        memoryAccess: 32,
     },
     memory: {
         // Empty space between each slot on all sides
