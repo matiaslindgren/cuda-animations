@@ -225,10 +225,10 @@ int main(int argc, char** argv) {
     for (auto func : step_functions) {
         std::cout << func.name << std::endl;
         for (auto i = 0; i < iterations; ++i) {
-            const auto time_start = std::chrono::high_resolution_clock::now();
             std::vector<float> data(n*n);
             std::generate(data.begin(), data.end(), next_float);
             std::vector<float> result(n*n);
+            const auto time_start = std::chrono::high_resolution_clock::now();
             func.callable(result.data(), data.data(), n);
             const auto time_end = std::chrono::high_resolution_clock::now();
             const std::chrono::duration<float> delta_seconds = time_end - time_start;
