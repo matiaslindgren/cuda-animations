@@ -1,11 +1,12 @@
 // kernels from http://ppc.cs.aalto.fi/ch4 (2018)
 #include <algorithm>
+#include <chrono>
+#include <iomanip>
+#include <iostream>
 #include <iostream>
 #include <limits>
+#include <numeric>
 #include <random>
-#include <chrono>
-#include <iostream>
-#include <iomanip>
 
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -42,7 +43,8 @@ inline int static roundup(int a, int b) {
 }
 
 
-__global__ void kernel_v0(const float *in, float *out, int n) {
+__global__ void kernel_v0(const float *in, float *out, int n, clock_t* cycles) {
+    clock_t begin_time = clock();
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     float v = HUGE_VALF;
@@ -53,10 +55,13 @@ __global__ void kernel_v0(const float *in, float *out, int n) {
         v = min(v, z);
     }
     out[n*i + j] = v;
+    clock_t end_time = clock();
+    cycles[n*i + j] = end_time - start_time;
 }
 
 
-__global__ void kernel_v1(const float *in, float *out, int n) {
+__global__ void kernel_v1(const float *in, float *out, int n, clock_t* cycles) {
+    clock_t begin_time = clock();
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     float v = HUGE_VALF;
@@ -67,10 +72,13 @@ __global__ void kernel_v1(const float *in, float *out, int n) {
         v = min(v, z);
     }
     out[n*j + i] = v;
+    clock_t end_time = clock();
+    cycles[n*j + i] = end_time - start_time;
 }
 
 
-__global__ void kernel_v2(float* r, const float* d, int n, int nn) {
+__global__ void kernel_v2(float* r, const float* d, int n, int nn, clock_t* cycles) {
+    clock_t begin_time = clock();
     int ia = threadIdx.x;
     int ja = threadIdx.y;
     int ic = blockIdx.x;
@@ -110,10 +118,13 @@ __global__ void kernel_v2(float* r, const float* d, int n, int nn) {
             }
         }
     }
+    clock_t end_time = clock();
+    cycles[n*(ia + ic * blockDim.x) + ja + jc * blockDim.y] = end_time - start_time;
 }
 
 
-__global__ void add_padding_v2(const float* r, float* d, int n, int nn) {
+__global__ void add_padding_v2(const float* r, float* d, int n, int nn, clock_t* cycles) {
+    clock_t begin_time = clock();
     int ja = threadIdx.x;
     int i = blockIdx.y;
 
@@ -125,13 +136,17 @@ __global__ void add_padding_v2(const float* r, float* d, int n, int nn) {
         d[nn*i + j] = v;
         t[nn*j + i] = v;
     }
+    clock_t end_time = clock();
+    cycles[n*i + ja] = end_time - start_time;
 }
 
 
-void step_v0(float* r, const float* d, int n) {
+void step_v0(float* r, const float* d, int n, clock_t* cycles) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
     CHECK(cudaMalloc((void**)&dGPU, n * n * sizeof(float)));
+    float* cyclesGPU = NULL;
+    CHECK(cudaMalloc((void**)&cycles, n * n * sizeof(clock_t)));
     float* rGPU = NULL;
     CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
     CHECK(cudaMemcpy(dGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
@@ -139,7 +154,7 @@ void step_v0(float* r, const float* d, int n) {
     // Run kernel
     dim3 dimBlock(16, 16);
     dim3 dimGrid(divup(n, dimBlock.x), divup(n, dimBlock.y));
-    kernel_v0<<<dimGrid, dimBlock>>>(rGPU, dGPU, n);
+    kernel_v0<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, cyclesGPU);
     CHECK(cudaGetLastError());
 
     // Copy data back to CPU & release memory
@@ -149,10 +164,12 @@ void step_v0(float* r, const float* d, int n) {
 }
 
 
-void step_v1(float* r, const float* d, int n) {
+void step_v1(float* r, const float* d, int n, clock_t* cycles) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
     CHECK(cudaMalloc((void**)&dGPU, n * n * sizeof(float)));
+    float* cyclesGPU = NULL;
+    CHECK(cudaMalloc((void**)&cycles, n * n * sizeof(clock_t)));
     float* rGPU = NULL;
     CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
     CHECK(cudaMemcpy(dGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
@@ -160,7 +177,7 @@ void step_v1(float* r, const float* d, int n) {
     // Run kernel
     dim3 dimBlock(16, 16);
     dim3 dimGrid(divup(n, dimBlock.x), divup(n, dimBlock.y));
-    kernel_v1<<<dimGrid, dimBlock>>>(rGPU, dGPU, n);
+    kernel_v1<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, cyclesGPU);
     CHECK(cudaGetLastError());
 
     // Copy data back to CPU & release memory
@@ -170,12 +187,14 @@ void step_v1(float* r, const float* d, int n) {
 }
 
 
-void step_v2(float* r, const float* d, int n) {
+void step_v2(float* r, const float* d, int n, clock_t* cycles) {
     int nn = roundup(n, 64);
 
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
     CHECK(cudaMalloc((void**)&dGPU, 2 * nn * nn * sizeof(float)));
+    float* cyclesGPU = NULL;
+    CHECK(cudaMalloc((void**)&cycles, n * n * sizeof(clock_t)));
     float* rGPU = NULL;
     CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
     CHECK(cudaMemcpy(rGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
@@ -184,7 +203,7 @@ void step_v2(float* r, const float* d, int n) {
     {
         dim3 dimBlock(64, 1);
         dim3 dimGrid(1, nn);
-        add_padding_v2<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, nn);
+        add_padding_v2<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, nn, cyclesGPU);
         CHECK(cudaGetLastError());
     }
 
@@ -192,7 +211,7 @@ void step_v2(float* r, const float* d, int n) {
     {
         dim3 dimBlock(8, 8);
         dim3 dimGrid(nn / 64, nn / 64);
-        kernel_v2<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, nn);
+        kernel_v2<<<dimGrid, dimBlock>>>(rGPU, dGPU, n, nn, cyclesGPU); // TODO overwrites padding benchmark
         CHECK(cudaGetLastError());
     }
 
@@ -222,17 +241,20 @@ int main(int argc, char** argv) {
         {"step_v2", step_v2},
     };
 
+
     for (auto func : step_functions) {
         std::cout << func.name << std::endl;
         for (auto i = 0; i < iterations; ++i) {
             std::vector<float> data(n*n);
             std::generate(data.begin(), data.end(), next_float);
             std::vector<float> result(n*n);
+            std::vector<clock_t> cycles(n*n);
             const auto time_start = std::chrono::high_resolution_clock::now();
-            func.callable(result.data(), data.data(), n);
+            func.callable(result.data(), data.data(), n, cycles.data());
             const auto time_end = std::chrono::high_resolution_clock::now();
             const std::chrono::duration<float> delta_seconds = time_end - time_start;
-            std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
+            std::cout << std::setprecision(7) << delta_seconds.count() << ' ';
+            std::cout << std::accumulate(cycles.begin(), cycles.end()) << std::endl;
         }
     }
 
