@@ -10,7 +10,6 @@
 #include <cstdio>
 #include <cuda_runtime.h>
 
-#define BLOCKSIZE 32
 
 inline void check(cudaError_t err, const char* context) {
     if (err != cudaSuccess) {
@@ -22,6 +21,9 @@ inline void check(cudaError_t err, const char* context) {
 
 #define CHECK(x) check(x, #x)
 
+#define BLOCKSIZE 32
+
+
 float next_float() {
     static std::random_device rd;
     static std::default_random_engine e(rd());
@@ -29,13 +31,16 @@ float next_float() {
     return floats(e);
 }
 
+
 inline int static divup(int a, int b) {
     return (a + b - 1)/b;
 }
 
+
 inline int static roundup(int a, int b) {
     return divup(a, b) * b;
 }
+
 
 __global__ void kernel_v0(const float *in, float *out, int n) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -50,6 +55,7 @@ __global__ void kernel_v0(const float *in, float *out, int n) {
     out[n*i + j] = v;
 }
 
+
 __global__ void kernel_v1(const float *in, float *out, int n) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
@@ -62,6 +68,7 @@ __global__ void kernel_v1(const float *in, float *out, int n) {
     }
     out[n*j + i] = v;
 }
+
 
 __global__ void kernel_v2(float* r, const float* d, int n, int nn) {
     int ia = threadIdx.x;
@@ -105,6 +112,7 @@ __global__ void kernel_v2(float* r, const float* d, int n, int nn) {
     }
 }
 
+
 __global__ void add_padding_v2(const float* r, float* d, int n, int nn) {
     int ja = threadIdx.x;
     int i = blockIdx.y;
@@ -118,6 +126,7 @@ __global__ void add_padding_v2(const float* r, float* d, int n, int nn) {
         t[nn*j + i] = v;
     }
 }
+
 
 void step_v0(float* r, const float* d, int n) {
     // Allocate memory & copy data to GPU
@@ -139,6 +148,7 @@ void step_v0(float* r, const float* d, int n) {
     CHECK(cudaFree(rGPU));
 }
 
+
 void step_v1(float* r, const float* d, int n) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
@@ -158,6 +168,7 @@ void step_v1(float* r, const float* d, int n) {
     CHECK(cudaFree(dGPU));
     CHECK(cudaFree(rGPU));
 }
+
 
 void step_v2(float* r, const float* d, int n) {
     int nn = roundup(n, 64);
@@ -191,40 +202,38 @@ void step_v2(float* r, const float* d, int n) {
     CHECK(cudaFree(rGPU));
 }
 
-int main() {
+
+struct StepFunction {
+    const char* name;
+    void (*callable)(float*, const float*, int);
+};
+
+
+int main(int argc, char** argv) {
+    int iterations = 1;
+    if (argc > 1) {
+        iterations = std::stoi(argv[1]);
+    }
+
     const size_t n = BLOCKSIZE << 7;
+    std::vector<StepFunction> step_functions = {
+        {"step_v0", step_v0},
+        {"step_v1", step_v1},
+        {"step_v2", step_v2},
+    };
 
-    {
-        const auto time_start = std::chrono::high_resolution_clock::now();
-        std::vector<float> data(n*n);
-        std::generate(data.begin(), data.end(), next_float);
-        std::vector<float> result(n*n);
-        step_v0(result.data(), data.data(), n);
-        const auto time_end = std::chrono::high_resolution_clock::now();
-        const std::chrono::duration<float> delta_seconds = time_end - time_start;
-        std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
-    }
-
-    {
-        const auto time_start = std::chrono::high_resolution_clock::now();
-        std::vector<float> data(n*n);
-        std::generate(data.begin(), data.end(), next_float);
-        std::vector<float> result(n*n);
-        step_v1(result.data(), data.data(), n);
-        const auto time_end = std::chrono::high_resolution_clock::now();
-        const std::chrono::duration<float> delta_seconds = time_end - time_start;
-        std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
-    }
-
-    {
-        const auto time_start = std::chrono::high_resolution_clock::now();
-        std::vector<float> data(n*n);
-        std::generate(data.begin(), data.end(), next_float);
-        std::vector<float> result(n*n);
-        step_v2(result.data(), data.data(), n);
-        const auto time_end = std::chrono::high_resolution_clock::now();
-        const std::chrono::duration<float> delta_seconds = time_end - time_start;
-        std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
+    for (auto func : step_functions) {
+        std::cout << func.name << std::endl;
+        for (auto i = 0; i < iterations; ++i) {
+            const auto time_start = std::chrono::high_resolution_clock::now();
+            std::vector<float> data(n*n);
+            std::generate(data.begin(), data.end(), next_float);
+            std::vector<float> result(n*n);
+            func.callable(result.data(), data.data(), n);
+            const auto time_end = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<float> delta_seconds = time_end - time_start;
+            std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
+        }
     }
 
 }
