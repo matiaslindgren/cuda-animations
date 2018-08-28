@@ -4,6 +4,8 @@
 #include <limits>
 #include <random>
 #include <chrono>
+#include <iostream>
+#include <iomanip>
 
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -191,14 +193,13 @@ void step_v2(float* r, const float* d, int n) {
 
 int main() {
     const size_t n = BLOCKSIZE << 7;
-    const size_t data_size = n * n * sizeof(float);
 
     {
         const auto time_start = std::chrono::high_resolution_clock::now();
         std::vector<float> data(n*n);
         std::generate(data.begin(), data.end(), next_float);
         std::vector<float> result(n*n);
-        step_v0(result, data, n);
+        step_v0(result.data(), data.data(), n);
         const auto time_end = std::chrono::high_resolution_clock::now();
         const std::chrono::duration<float> delta_seconds = time_end - time_start;
         std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
@@ -209,7 +210,7 @@ int main() {
         std::vector<float> data(n*n);
         std::generate(data.begin(), data.end(), next_float);
         std::vector<float> result(n*n);
-        step_v1(result, data, n);
+        step_v1(result.data(), data.data(), n);
         const auto time_end = std::chrono::high_resolution_clock::now();
         const std::chrono::duration<float> delta_seconds = time_end - time_start;
         std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
@@ -220,7 +221,7 @@ int main() {
         std::vector<float> data(n*n);
         std::generate(data.begin(), data.end(), next_float);
         std::vector<float> result(n*n);
-        step_v2(result, data, n);
+        step_v2(result.data(), data.data(), n);
         const auto time_end = std::chrono::high_resolution_clock::now();
         const std::chrono::duration<float> delta_seconds = time_end - time_start;
         std::cout << std::setprecision(7) << delta_seconds.count() << std::endl;
