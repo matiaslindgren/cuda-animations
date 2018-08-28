@@ -4,13 +4,13 @@ NVCCFLAGS=--std=c++14 -O3
 MAIN_SRC=main.cu
 ANALYZE_SRC=analyze.cu
 
-all: dirs app analyze
+all: dirs benchmark analyze
 
 dirs:
 	mkdir --parents bin
 
-app:
-	$(NVCC) $(NVCCFLAGS) $(MAIN_SRC) -o bin/app
+benchmark:
+	$(NVCC) $(NVCCFLAGS) $(MAIN_SRC) -o bin/benchmark
 
 analyze:
 	$(NVCC) $(NVCCFLAGS) $(ANALYZE_SRC) -o bin/analyze
