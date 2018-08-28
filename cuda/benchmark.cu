@@ -56,7 +56,7 @@ __global__ void kernel_v0(const float *in, float *out, int n, clock_t* cycles) {
     }
     out[n*i + j] = v;
     clock_t end_time = clock();
-    cycles[n*i + j] = end_time - start_time;
+    cycles[n*i + j] = end_time - begin_time;
 }
 
 
@@ -73,7 +73,7 @@ __global__ void kernel_v1(const float *in, float *out, int n, clock_t* cycles) {
     }
     out[n*j + i] = v;
     clock_t end_time = clock();
-    cycles[n*j + i] = end_time - start_time;
+    cycles[n*j + i] = end_time - begin_time;
 }
 
 
@@ -119,7 +119,7 @@ __global__ void kernel_v2(float* r, const float* d, int n, int nn, clock_t* cycl
         }
     }
     clock_t end_time = clock();
-    cycles[n*(ia + ic * blockDim.x) + ja + jc * blockDim.y] = end_time - start_time;
+    cycles[n*(ia + ic * blockDim.x) + ja + jc * blockDim.y] = end_time - begin_time;
 }
 
 
@@ -137,7 +137,7 @@ __global__ void add_padding_v2(const float* r, float* d, int n, int nn, clock_t*
         t[nn*j + i] = v;
     }
     clock_t end_time = clock();
-    cycles[n*i + ja] = end_time - start_time;
+    cycles[n*i + ja] = end_time - begin_time;
 }
 
 
@@ -145,7 +145,7 @@ void step_v0(float* r, const float* d, int n, clock_t* cycles) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
     CHECK(cudaMalloc((void**)&dGPU, n * n * sizeof(float)));
-    float* cyclesGPU = NULL;
+    clock_t* cyclesGPU = NULL;
     CHECK(cudaMalloc((void**)&cycles, n * n * sizeof(clock_t)));
     float* rGPU = NULL;
     CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
@@ -168,7 +168,7 @@ void step_v1(float* r, const float* d, int n, clock_t* cycles) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
     CHECK(cudaMalloc((void**)&dGPU, n * n * sizeof(float)));
-    float* cyclesGPU = NULL;
+    clock_t* cyclesGPU = NULL;
     CHECK(cudaMalloc((void**)&cycles, n * n * sizeof(clock_t)));
     float* rGPU = NULL;
     CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
@@ -193,7 +193,7 @@ void step_v2(float* r, const float* d, int n, clock_t* cycles) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
     CHECK(cudaMalloc((void**)&dGPU, 2 * nn * nn * sizeof(float)));
-    float* cyclesGPU = NULL;
+    clock_t* cyclesGPU = NULL;
     CHECK(cudaMalloc((void**)&cycles, n * n * sizeof(clock_t)));
     float* rGPU = NULL;
     CHECK(cudaMalloc((void**)&rGPU, n * n * sizeof(float)));
@@ -224,7 +224,7 @@ void step_v2(float* r, const float* d, int n, clock_t* cycles) {
 
 struct StepFunction {
     const char* name;
-    void (*callable)(float*, const float*, int);
+    void (*callable)(float*, const float*, int, clock_t*);
 };
 
 
@@ -254,7 +254,7 @@ int main(int argc, char** argv) {
             const auto time_end = std::chrono::high_resolution_clock::now();
             const std::chrono::duration<float> delta_seconds = time_end - time_start;
             std::cout << std::setprecision(7) << delta_seconds.count() << ' ';
-            std::cout << std::accumulate(cycles.begin(), cycles.end()) << std::endl;
+            std::cout << std::accumulate(cycles.begin(), cycles.end(), 0) << std::endl;
         }
     }
 
