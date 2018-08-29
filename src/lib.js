@@ -271,6 +271,8 @@ class MemorySlot extends Drawable {
         // Copy default color
         this.defaultColor = this.fillRGBA.slice();
         this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
+        this.touchedColor = CONFIG.cache.cachedStateRGBA.slice();
+        this.touchedColor[3] = 1.0;
         this.pendingColor = CONFIG.cache.pendingStateRGBA.slice();
         this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
         this.coolDownStep = (1.0 - this.cachedColor[3]) / (this.coolDownPeriod + 1);
@@ -279,7 +281,7 @@ class MemorySlot extends Drawable {
     // Simulate a memory access to this index
     touch() {
         this.hotness = this.coolDownPeriod;
-        this.fillRGBA[3] = 0.9;
+        this.fillRGBA = this.touchedColor;
     }
 
     // Update slot cache status to highlight cached slots in rendering
