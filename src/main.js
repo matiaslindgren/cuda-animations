@@ -52,7 +52,7 @@ function makeKernelSelectOptionsHTML(kernels) {
 
 function makeSMCountSelectOptionsHTML(config) {
     function makeOption(key) {
-        return '<option value="' + key + '"' + ((key === smCount) ? 'selected' : '') + '>' + key + ' SMs</option>';
+        return '<option value="' + key + '"' + ((key === smCount) ? 'selected' : '') + '>' + key + ' SM' + ((key > 1) ? 's' : '') + '</option>';
     }
     let optionsHTML = Array.from(new Array(config.max - config.min + 1), (_, i) => makeOption(i + config.min));
     return optionsHTML.join("\n");
