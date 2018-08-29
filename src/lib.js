@@ -281,7 +281,7 @@ class MemorySlot extends Drawable {
     // Simulate a memory access to this index
     touch() {
         this.hotness = this.coolDownPeriod;
-        this.fillRGBA = this.touchedColor;
+        this.fillRGBA = this.touchedColor.slice();
     }
 
     // Update slot cache status to highlight cached slots in rendering
