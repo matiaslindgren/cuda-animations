@@ -45,7 +45,7 @@ const ppcStepV1Lines = [
 "        float z = x + y;",
 "        v = min(v, z);",
 "    }",
-"    output[n*i + j] = v;",
+"    output[n*j + i] = v;",
 "}",
 ];
 
