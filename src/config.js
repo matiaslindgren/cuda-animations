@@ -55,17 +55,17 @@ const CONFIG = {
             L2CacheAccess: 0,
             memoryAccess: 0,
         },
-        low: {
-            name: "Low",
+        veryLow: {
+            name: "Very low",
             arithmetic: 0,
             L2CacheAccess: 0,
-            memoryAccess: 2,
+            memoryAccess: 8,
         },
-        realistic: {
-            name: "Somewhat realistic",
+        realisticLow: {
+            name: "Realistic low",
             arithmetic: 1,
-            L2CacheAccess: 8,
-            memoryAccess: 32,
+            L2CacheAccess: 10,
+            memoryAccess: 60,
         },
     },
     memory: {

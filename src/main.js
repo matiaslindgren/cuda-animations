@@ -15,7 +15,7 @@ var smCount = CONFIG.SM.count.default;
 // Amount of cache lines
 var cacheLineCount = CONFIG.cache.L2CacheLines.default;
 // Simulated instruction latencies as SM cycles
-var instructionLatencies = "low";
+var instructionLatencies = "veryLow";
 
 function makeSMlistBody(count) {
     function liWrap(s, liID) {
