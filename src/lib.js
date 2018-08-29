@@ -738,14 +738,13 @@ class SMController {
     cycle() {
         this.statsWidget.cycle();
         this.scheduleWarps();
-        // Execute warps until an instruction requiring at least one cycle has been executed
+        let isDone = true;
         if (this.hasNonTerminatedWarps()) {
-            let isDone = false;
-            while (!isDone) {
-                isDone = true;
-                this.updateProgramCounters();
-                for (let warp of this.nonTerminatedWarps()) {
-                    isDone = warp.cycle();
+            // Execute warps
+            this.updateProgramCounters();
+            for (let warp of this.nonTerminatedWarps()) {
+                if (!warp.cycle() && isDone) {
+                    isDone = false;
                 }
             }
         } else {
@@ -756,6 +755,8 @@ class SMController {
                 this.program = null;
             }
         }
+        // Return false if this cycle executed a zero latency instruction, meaning the controller should immediately execute the next one
+        return isDone;
     }
 }
 
