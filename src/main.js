@@ -14,6 +14,8 @@ var activeKernel = "ppcStepV0";
 var smCount = CONFIG.SM.count.default;
 // Amount of cache lines
 var cacheLineCount = CONFIG.cache.L2CacheLines.default;
+// Simulated instruction latencies as SM cycles
+var instructionLatencies = "low";
 
 function makeSMlistBody(count) {
     function liWrap(s, liID) {
@@ -67,6 +69,13 @@ function makeCacheSizeSelectOptionsHTML(config) {
     return optionsHTML.join("\n");
 }
 
+function makeLatencySelectOptionsHTML() {
+    function makeOption(key) {
+        return '<option value="' + key + '"' + ((key === instructionLatencies) ? 'selected' : '') + '>' + CONFIG.latencies[key].name + ' latency</option>';
+    }
+    return Array.from(Object.keys(CONFIG.latencies), makeOption).join("\n");
+}
+
 function parseStyle(style, prop, unit) {
     if (typeof unit === "undefined") {
         unit = "px";
@@ -102,6 +111,7 @@ function initUI() {
     const kernelSelect = document.getElementById("kernel-select");
     const smCountSelect = document.getElementById("sm-count-select");
     const cacheSizeSelect = document.getElementById("cache-size-select");
+    const latencySelect = document.getElementById("latency-select");
     pauseButton.addEventListener("click", _ => {
         pause();
         pauseButton.value = drawing ? "Pause" : "Continue";
@@ -128,10 +138,15 @@ function initUI() {
         pauseButton.value = "Pause";
         restart();
     });
+    latencySelect.addEventListener("change", event => {
+        drawing = false;
+        instructionLatencies = event.target.value;
+        pauseButton.value = "Pause";
+        restart();
+    });
 }
 
-function initSimulation() {
-    // Populate UI elements
+function populateUI() {
     // SM list contents
     document.getElementById("sm-list").innerHTML = makeSMlistBody(smCount);
     // CUDA kernel selector
@@ -140,6 +155,12 @@ function initSimulation() {
     document.getElementById("sm-count-select").innerHTML = makeSMCountSelectOptionsHTML(CONFIG.SM.count);
     // Cache size selector
     document.getElementById("cache-size-select").innerHTML = makeCacheSizeSelectOptionsHTML(CONFIG.cache.L2CacheLines);
+    // Instruction latency selector
+    document.getElementById("latency-select").innerHTML = makeLatencySelectOptionsHTML();
+}
+
+function initSimulation() {
+    populateUI();
 
     memoryCanvasInput = document.getElementById("memoryCanvasInput");
     //memoryCanvasOutput = document.getElementById("memoryCanvasOutput");

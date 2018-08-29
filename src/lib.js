@@ -560,15 +560,15 @@ class Instruction {
     }
 
     static arithmetic() {
-        return new Instruction("arithmetic", CONFIG.latencies.arithmetic);
+        return new Instruction("arithmetic", CONFIG.latencies[instructionLatencies].arithmetic);
     }
 
     static cachedMemoryAccess() {
-        return new Instruction("cachedMemoryAccess", CONFIG.latencies.L2CacheAccess);
+        return new Instruction("cachedMemoryAccess", CONFIG.latencies[instructionLatencies].L2CacheAccess);
     }
 
     static deviceMemoryAccess(i) {
-        return new Instruction("deviceMemoryAccess", CONFIG.latencies.memoryAccess, {index: i});
+        return new Instruction("deviceMemoryAccess", CONFIG.latencies[instructionLatencies].memoryAccess, {index: i});
     }
 }
 
