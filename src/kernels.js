@@ -88,11 +88,11 @@ const ppcStepV2Lines = [
 "            int j = jc * 64 + jb * 8 + ja;",
 "            y[jb] = d[n*k + j];",
 "        }",
-"        for (int ib = 0; ib < 8; ++ib) {",
-"            for (int jb = 0; jb < 8; ++jb) {",
-"                v[ib][jb] = min(v[ib][jb], x[ib] + y[jb]);",
-"            }",
-"        }",
+"        // for (int ib = 0; ib < 8; ++ib) {",
+"        //     for (int jb = 0; jb < 8; ++jb) {",
+"        //         v[ib][jb] = min(v[ib][jb], x[ib] + y[jb]);",
+"        //     }",
+"        // }",
 "    }",
 "    for (int ib = 0; ib < 8; ++ib) {",
 "        for (int jb = 0; jb < 8; ++jb) {",
@@ -163,6 +163,7 @@ function() {
     y[jb] = this.arrayGet(this.args.input, n*k + j); // Get from d
 },
 function() { if (++this.locals.jb < 8) { this.jump(-2); } else { this.locals.jb = undefined; } },
+/*
 function() { this.locals.ib = this.identity(0); },
 function() { this.locals.jb = this.identity(0); },
 function() {
@@ -176,6 +177,8 @@ function() {
 function() { if (++this.locals.jb < 8) { this.jump(-1); } else { this.locals.jb = undefined; } },
 function() { if (++this.locals.ib < 8) { this.jump(-3); } else { this.locals.ib = undefined; } },
 function() { if (++this.locals.k < this.args.n) { this.jump(-15); } else { this.locals.k = undefined; } },
+*/
+function() { if (++this.locals.k < this.args.n) { this.jump(-10); } else { this.locals.k = undefined; } },
 function() { this.locals.ib = this.identity(0); },
 function() { this.locals.jb = this.identity(0); },
 function() {
@@ -252,30 +255,30 @@ const CUDAKernels = {
         statements: ppcStepV1Statements,
     },
 
-    ppcStepV2: {
-        displayName: "Shortcut step v2",
-        kernelArgs: {
-            n: 32,
-        },
-        memory: {
-            input: {
-                rows: 64,
-                columns: 32,
-            },
-        },
-        grid: {
-            dimGrid: {
-                x: 2,
-                y: 2,
-            },
-            dimBlock: {
-                x: 8,
-                y: 8
-            },
-        },
-        sourceLines: ppcStepV2Lines,
-        statements: ppcStepV2Statements,
-    },
+    // ppcStepV2: {
+    //     displayName: "Shortcut step v2",
+    //     kernelArgs: {
+    //         n: 32,
+    //     },
+    //     memory: {
+    //         input: {
+    //             rows: 64,
+    //             columns: 32,
+    //         },
+    //     },
+    //     grid: {
+    //         dimGrid: {
+    //             x: 2,
+    //             y: 2,
+    //         },
+    //         dimBlock: {
+    //             x: 8,
+    //             y: 8
+    //         },
+    //     },
+    //     sourceLines: ppcStepV2Lines,
+    //     statements: ppcStepV2Statements,
+    // },
 
     trivial: {
         displayName: "Fully coalesced",
