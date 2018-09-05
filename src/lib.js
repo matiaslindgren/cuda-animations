@@ -31,6 +31,8 @@ class Drawable {
 
 // Simulated device memory accesses through L2.
 // LRU for convenience and neat visual appearance, although Mei and Chu [1] suggest the L2 replacement policy is not LRU
+// The cache can be disabled by giving a zero linesCount argument to the constructor.
+// In this case, all memory accesses will still be simulated, but no indexes are cached at any point.
 class L2Cache {
     constructor(linesCount) {
         // Cached device memory indexes.
@@ -63,7 +65,8 @@ class L2Cache {
                     const lineIndex = this.getCachedIndex(memoryIndex);
                     if (lineIndex < 0) {
                         this.addNew(memoryIndex);
-                    } else {
+                    } else if (this.ages.length > 0) {
+                        // Reset cache line age only if cache is enabled
                         this.ages[lineIndex] = 0;
                     }
                 }
@@ -94,6 +97,10 @@ class L2Cache {
     // In case two cache lines have the same age, the line with a lower index is taken as the older one
     // This is only to make the animation a bit prettier
     addNew(i) {
+        if (this.lines.length === 0) {
+            // Cache is disabled
+            return;
+        }
         const oldestIndex = this.lines.reduce((oldest, _, index) => {
             if ((this.ages[index] > this.ages[oldest])
                 || (this.ages[index] === this.ages[oldest]
@@ -481,7 +488,7 @@ class Warp {
             const aligned = index - index % 32;
             alignedIndexes.add(aligned);
         });
-        assert(alignedIndexes.size > 0 && alignedIndexes.size < 32);
+        assert(alignedIndexes.size > 0 && alignedIndexes.size <= 32, "alignment failed, indexes aligned: " + alignedIndexes.size);
         // The amount of remaining indexes is the minimum amount of required memory transactions
         const coalescedLatency = alignedIndexes.size * this.threads[0].instruction.cyclesLeft;
         // Assign new latencies to device memory access instructions

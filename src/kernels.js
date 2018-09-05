@@ -280,7 +280,7 @@ const CUDAKernels = {
     //     statements: ppcStepV2Statements,
     // },
 
-    trivial: {
+    trivialBest: {
         displayName: "Fully coalesced",
         kernelArgs: {},
         grid: {
@@ -308,18 +308,50 @@ const CUDAKernels = {
             "}",
         ],
         statements: [
-            function() {
-                this.locals.c = this.identity(2.0);
+            function() { this.locals.c = this.identity(2.0); },
+            function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x); },
+            function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
+            function() { this.arithmetic(this.locals.c * this.locals.x); },
+        ],
+    },
+
+    trivialPoor: {
+        displayName: "Poorly coalescing",
+        kernelArgs: {
+            n: 32,
+        },
+        grid: {
+            dimGrid: {
+                x: 32,
+                y: 1,
             },
-            function() {
-                this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x);
+            dimBlock: {
+                x: 1,
+                y: 32,
             },
-            function() {
-                this.locals.x = this.arrayGet(this.args.input, this.locals.i);
+        },
+        memory: {
+            input: {
+                rows: 32,
+                columns: 32,
             },
+        },
+        sourceLines: [
+            "__global__ void kernel(float* output, const float* input) {",
+            "    const float c = 2.0;",
+            "    // Each block fetches one column containing 32 cache lines",
+            "    float x = input[n * threadIdx.y + blockIdx.x];",
+            "    output[i] = c * x;",
+            "}",
+        ],
+        statements: [
+            function() { this.locals.c = this.identity(2.0); },
+            function() { this.identity(null); },
             function() {
-                this.arithmetic(this.locals.c * this.locals.x);
+                const idx = this.args.n * this.threadIdx.y + this.blockIdx.x;
+                this.locals.x = this.arrayGet(this.args.input, idx);
             },
+            function() { this.arithmetic(this.locals.c * this.locals.x); },
         ],
     },
 

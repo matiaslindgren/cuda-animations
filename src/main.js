@@ -11,9 +11,9 @@ var prevRenderFrameID;
 // Choose default CUDA kernel from kernels.js
 var activeKernel = "ppcStepV0";
 // Amount of streaming multiprocessors in device
-var smCount = CONFIG.SM.count.default;
+var smCount = 1;
 // Amount of cache lines
-var cacheLineCount = CONFIG.cache.L2CacheLines.default;
+var cacheLineCount = 0;
 // Simulated instruction latencies as SM cycles
 var instructionLatencies = "veryLow";
 
@@ -205,7 +205,7 @@ function initSimulation() {
 
 function clear(canvas) {
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
