@@ -62,14 +62,14 @@ const CONFIG = {
             L2CacheAccess: 0,
             memoryAccess: 5,
         },
-        low: {
-            name: "Low",
+        medium: {
+            name: "(memory access only) Medium",
             arithmetic: 0,
             L2CacheAccess: 0,
             memoryAccess: 25,
         },
-        realisticLow: {
-            name: "Realistic low",
+        high: {
+            name: "High",
             arithmetic: 1,
             L2CacheAccess: 20,
             memoryAccess: 70,
@@ -86,11 +86,7 @@ const CONFIG = {
     cache: {
         // Size of a L2 cacheline in slots
         L2CacheLineSize: 8,
-        L2CacheLines: {
-            min: 0,
-            max: 8*8,
-            increment: 8,
-        },
+        L2CacheLines: 40,
         cachedStateRGBA: [120, 120, 120, 0.4],
         pendingStateRGBA: [120, 120, 120, 0.3],
     },

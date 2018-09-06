@@ -60,12 +60,12 @@ function makeSMCountSelectOptionsHTML(config) {
 
 function makeCacheSizeSelectOptionsHTML(config) {
     function makeOption(key) {
-        return '<option value="' + key + '"' + ((key === cacheLineCount) ? 'selected' : '') + '>' + key + ' cache lines</option>';
+        return '<option value="' + key + '"' + ((key === cacheLineCount) ? 'selected' : '') + '>Cache ' + ((key > 0) ? 'enabled' : 'disabled') + '</option>';
     }
-    let optionsHTML = [];
-    for (let i = 0; i < config.max - config.min + 1; i += config.increment) {
-        optionsHTML.push(makeOption(i + config.min));
-    }
+    let optionsHTML = [
+        makeOption(0),
+        makeOption(CONFIG.cache.L2CacheLines),
+    ];
     return optionsHTML.join("\n");
 }
 
