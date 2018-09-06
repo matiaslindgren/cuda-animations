@@ -31,7 +31,7 @@ function get4Palette(key) {
             const alpha = 0.10;
             return [
                 [35, 196, 1, alpha],
-                [47, 21, 162, alpha],
+                [47, 21, 182, alpha],
                 [227, 1, 23, alpha],
                 [235, 190, 2, alpha],
             ];
@@ -90,8 +90,8 @@ const CONFIG = {
             max: 8*8,
             increment: 8,
         },
-        cachedStateRGBA: [10, 10, 200, 0.2],
-        pendingStateRGBA: [10, 10, 200, 0.1],
+        cachedStateRGBA: [120, 120, 120, 0.4],
+        pendingStateRGBA: [120, 120, 120, 0.2],
     },
     SM: {
         count: {
