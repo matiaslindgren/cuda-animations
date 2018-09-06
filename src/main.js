@@ -76,6 +76,13 @@ function makeLatencySelectOptionsHTML() {
     return Array.from(Object.keys(CONFIG.latencies), makeOption).join("\n");
 }
 
+function makeHighlightSelectOptionsHTML() {
+    return [
+        '<option value="on">Highlighted kernel lines</option>',
+        '<option value="off">No kernel line highlighting</option>',
+    ].join("\n");
+}
+
 function parseStyle(style, prop, unit) {
     if (typeof unit === "undefined") {
         unit = "px";
@@ -112,6 +119,8 @@ function initUI() {
     const smCountSelect = document.getElementById("sm-count-select");
     const cacheSizeSelect = document.getElementById("cache-size-select");
     const latencySelect = document.getElementById("latency-select");
+    const highlightSelect = document.getElementById("highlight-select");
+
     pauseButton.addEventListener("click", _ => {
         pause();
         pauseButton.value = drawing ? "Pause" : "Continue";
@@ -144,6 +153,10 @@ function initUI() {
         pauseButton.value = "Pause";
         restart();
     });
+    highlightSelect.addEventListener("change", event => {
+        device.setKernelHighlighting(event.target.value === "on");
+        clear(kernelCanvas, "hard");
+    });
 }
 
 function populateUI() {
@@ -157,6 +170,8 @@ function populateUI() {
     document.getElementById("cache-size-select").innerHTML = makeCacheSizeSelectOptionsHTML(CONFIG.cache.L2CacheLines);
     // Instruction latency selector
     document.getElementById("latency-select").innerHTML = makeLatencySelectOptionsHTML();
+    // Kernel line highlighting selector
+    document.getElementById("highlight-select").innerHTML = makeHighlightSelectOptionsHTML();
 }
 
 function initSimulation() {

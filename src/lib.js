@@ -279,7 +279,7 @@ class MemorySlot extends Drawable {
         this.defaultColor = this.fillRGBA.slice();
         this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
         this.touchedColor = CONFIG.cache.cachedStateRGBA.slice();
-        this.touchedColor[3] = 1.0;
+        this.touchedColor[3] = 0.8;
         this.pendingColor = CONFIG.cache.pendingStateRGBA.slice();
         this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
         this.coolDownStep = (1.0 - this.cachedColor[3]) / (this.coolDownPeriod + 1);
@@ -796,6 +796,7 @@ class Device {
         this.multiprocessors = this.createProcessors(smCount);
         this.kernelSource = null;
         this.L2Cache = new L2Cache(cacheLines);
+        this.kernelHighlightingOn = true;
     }
 
     // Initialize all processors with new program
@@ -808,6 +809,10 @@ class Device {
             sm.controller.grid = grid;
             sm.controller.scheduleNextBlock();
         });
+    }
+
+    setKernelHighlighting(on) {
+        this.kernelHighlightingOn = on;
     }
 
     programTerminated() {
@@ -849,7 +854,7 @@ class Device {
             // Update line highlights for each warp that has started executing
             for (let warp of sm.controller.nonTerminatedWarps()) {
                 const lineno = warp.programCounter;
-                if (lineno > 0) {
+                if (this.kernelHighlightingOn && lineno > 0) {
                     this.kernelSource.setHighlight(smIndex, lineno);
                 }
             }
