@@ -48,6 +48,7 @@ const CONFIG = {
         kernelHighlightPalette: get4Palette("rgba-colorful"),
     },
     // Simulated latency in cycles for different instruction types
+    // Mei and Chu [1] report that global memory access latencies on a GTX980 can be measured in tens if there is an L1 TLB hit, while on an L1 TLB miss, the latencies go up to hundreds or thousands of cycles.
     latencies: {
         none: {
             name: "No",
