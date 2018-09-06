@@ -16,6 +16,7 @@ var smCount = 1;
 var cacheLineCount = 0;
 // Simulated instruction latencies as SM cycles
 var instructionLatencies = "veryLow";
+var highlightKernelLines = "on";
 
 function makeSMlistBody(count) {
     function liWrap(s, liID) {
@@ -77,10 +78,10 @@ function makeLatencySelectOptionsHTML() {
 }
 
 function makeHighlightSelectOptionsHTML() {
-    return [
-        '<option value="on">Highlighted kernel lines</option>',
-        '<option value="off">No kernel line highlighting</option>',
-    ].join("\n");
+    function makeOption(key) {
+        return '<option value="' + key + '"' + ((key === highlightKernelLines) ? 'selected' : '') + '>Highlighted kernel lines ' + key + ' </option>';
+    }
+    return [makeOption("on"), makeOption("off")].join("\n");
 }
 
 function parseStyle(style, prop, unit) {
@@ -154,7 +155,8 @@ function initUI() {
         restart();
     });
     highlightSelect.addEventListener("change", event => {
-        device.setKernelHighlighting(event.target.value === "on");
+        highlightKernelLines = event.target.value;
+        device.setKernelHighlighting(highlightKernelLines === "on");
         clear(kernelCanvas, "hard");
     });
 }
@@ -209,6 +211,7 @@ function initSimulation() {
         console.error("WARNING: Inconsistent kernel source line count when compared to callable statements, expected " + (kernel.statements.length) + " source lines but got " + (kernel.sourceLines.length - 2));
     }
     device.setProgram(grid, program);
+    device.setKernelHighlighting(highlightKernelLines === "on");
 
     // Resize memory canvas and its container depending on the input array size
     const memoryCanvasContainer = document.getElementById("memoryCanvasContainer");
