@@ -31,9 +31,9 @@ function get4Palette(key) {
             const alpha = 0.2;
             return [
                 [35, 196, 1, alpha],
-                [47, 21, 182, alpha],
                 [227, 1, 23, alpha],
                 [235, 190, 2, alpha],
+                [47, 21, 182, alpha],
             ];
         default:
             failHard();
