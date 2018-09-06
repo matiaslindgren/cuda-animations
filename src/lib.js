@@ -876,8 +876,11 @@ class KernelSource {
             return {
                 queue: [],
                 colors: Array.from(palette, color => {
+                    // Set highlight color with slightly lower alpha than SM color
+                    let hlColor = color.slice();
+                    hlColor[3] -= 0.05;
                     return {
-                        drawable: new Drawable(x, y, width, lineHeight, kernelCanvas, undefined, color),
+                        drawable: new Drawable(x, y, width, lineHeight, kernelCanvas, undefined, hlColor),
                     };
                 }),
             };

@@ -28,7 +28,7 @@ function printobj(o) {
 function get4Palette(key) {
     switch(key) {
         case "rgba-colorful":
-            const alpha = 0.10;
+            const alpha = 0.2;
             return [
                 [35, 196, 1, alpha],
                 [47, 21, 182, alpha],
@@ -79,7 +79,7 @@ const CONFIG = {
         // Empty space between each slot on all sides
         slotPadding: 1,
         slotSize: 16,
-        slotFillRGBA: [160, 160, 160, 0.1],
+        slotFillRGBA: [160, 160, 160, 0.2],
         // Amount of animation steps of the cooldown transition after touching a memory index
         coolDownPeriod: 10,
     },
@@ -92,7 +92,7 @@ const CONFIG = {
             increment: 8,
         },
         cachedStateRGBA: [120, 120, 120, 0.4],
-        pendingStateRGBA: [120, 120, 120, 0.2],
+        pendingStateRGBA: [120, 120, 120, 0.3],
     },
     SM: {
         count: {

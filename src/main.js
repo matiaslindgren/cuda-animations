@@ -203,9 +203,9 @@ function initSimulation() {
     resetSize(memoryCanvasContainer, canvasWidth, memoryCanvasContainer.height + canvasHeight);
 }
 
-function clear(canvas) {
+function clear(canvas, type) {
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + ((type === "hard") ? 1.0 : 0.5) + ')';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
@@ -218,15 +218,15 @@ function queueDraw() {
 }
 
 function draw(now) {
-    clear(memoryCanvasInput);
+    clear(memoryCanvasInput, "hard");
     //clear(memoryCanvasOutput);
     clear(kernelCanvas);
     device.step();
     if (device.programTerminated()) {
         device.clear();
-        clear(memoryCanvasInput);
+        clear(memoryCanvasInput, "hard");
         device.step();
-        clear(kernelCanvas);
+        clear(kernelCanvas, "hard");
         drawing = false;
     }
     if (drawing) {
