@@ -846,9 +846,12 @@ class Device {
         this.memory.step(L2CacheStateHandle);
         this.multiprocessors.forEach((sm, smIndex) => {
             sm.step();
+            // Update line highlights for each warp that has started executing
             for (let warp of sm.controller.nonTerminatedWarps()) {
                 const lineno = warp.programCounter;
-                this.kernelSource.setHighlight(smIndex, lineno);
+                if (lineno > 0) {
+                    this.kernelSource.setHighlight(smIndex, lineno);
+                }
             }
         });
         this.kernelSource.step();

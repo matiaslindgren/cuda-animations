@@ -218,12 +218,12 @@ const CUDAKernels = {
         },
         grid: {
             dimGrid: {
-                x: Math.round(32/8),
-                y: Math.round(32/8),
+                x: 2,
+                y: 2,
             },
             dimBlock: {
-                x: 8,
-                y: 8
+                x: 16,
+                y: 16
             },
         },
         sourceLines: ppcStepV0Lines,
@@ -243,12 +243,12 @@ const CUDAKernels = {
         },
         grid: {
             dimGrid: {
-                x: Math.round(32/8),
-                y: Math.round(32/8),
+                x: 2,
+                y: 2,
             },
             dimBlock: {
-                x: 8,
-                y: 8
+                x: 16,
+                y: 16
             },
         },
         sourceLines: ppcStepV1Lines,

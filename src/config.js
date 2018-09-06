@@ -99,7 +99,7 @@ const CONFIG = {
             max: 4,
         },
         warpSize: 32,
-        warpSchedulers: 2,
+        warpSchedulers: 1,
         // Probability of skipping an SM cycle (for simulating hardware latency)
         // Setting this to 0 makes all SMs to execute in unison
         latencyNoiseProb: 0.05,
