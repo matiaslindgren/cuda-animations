@@ -302,7 +302,8 @@ const CUDAKernels = {
         sourceLines: [
             "__global__ void kernel(float* output, const float* input) {",
             "    const float c = 2.0;",
-            "    // Each warp fetches one row, which coalesces to a single memory transaction",
+            "    // Each warp fetches one row,",
+            "    // which coalesces to a single memory transaction",
             "    const int i = threadIdx.x + blockIdx.y * blockDim.x;",
             "    float x = input[i];",
             "    output[i] = c * x;",
@@ -310,6 +311,7 @@ const CUDAKernels = {
         ],
         statements: [
             function() { this.locals.c = this.identity(2.0); },
+            function() { this.identity(null); },
             function() { this.identity(null); },
             function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x); },
             function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
@@ -341,7 +343,8 @@ const CUDAKernels = {
         sourceLines: [
             "__global__ void kernel(float* output, const float* input) {",
             "    const float c = 2.0;",
-            "    // Each warp fetches one column, which coalesces to 32 memory transactions",
+            "    // Each warp fetches one column,",
+            "    // which coalesces to 32 memory transactions",
             "    const int i = n * threadIdx.y + blockIdx.x;",
             "    float x = input[i];",
             "    output[i] = c * x;",
@@ -349,6 +352,7 @@ const CUDAKernels = {
         ],
         statements: [
             function() { this.locals.c = this.identity(2.0); },
+            function() { this.identity(null); },
             function() { this.identity(null); },
             function() { this.locals.i = this.args.n * this.threadIdx.y + this.blockIdx.x; },
             function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
