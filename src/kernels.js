@@ -262,113 +262,113 @@ const CUDAKernels = {
         statements: ppcStepV1Statements,
     },
 
-    // ppcStepV2: {
-    //     displayName: "Shortcut step v2",
-    //     kernelArgs: {
-    //         n: 32,
+    ppcStepV2: {
+        displayName: "Shortcut step v2",
+        kernelArgs: {
+            n: 64,
+        },
+        memory: {
+            input: {
+                rows: 128,
+                columns: 64,
+            },
+        },
+        grid: {
+            dimGrid: {
+                x: 1,
+                y: 1,
+            },
+            dimBlock: {
+                x: 8,
+                y: 8
+            },
+        },
+        sourceLines: ppcStepV2Lines,
+        statements: ppcStepV2Statements,
+    },
+
+    // trivialBest: {
+    //     displayName: "Fully coalesced",
+    //     kernelArgs: {},
+    //     grid: {
+    //         dimGrid: {
+    //             x: 1,
+    //             y: 32,
+    //         },
+    //         dimBlock: {
+    //             x: 32,
+    //             y: 1,
+    //         },
     //     },
     //     memory: {
     //         input: {
-    //             rows: 64,
+    //             rows: 32,
     //             columns: 32,
     //         },
     //     },
-    //     grid: {
-    //         dimGrid: {
-    //             x: 2,
-    //             y: 2,
-    //         },
-    //         dimBlock: {
-    //             x: 8,
-    //             y: 8
-    //         },
-    //     },
-    //     sourceLines: ppcStepV2Lines,
-    //     statements: ppcStepV2Statements,
+    //     sourceLines: [
+    //         sassDisclaimer,
+    //         "__global__ void kernel(float* output, const float* input) {",
+    //         "    const float c = 2.0;",
+    //         "    // Each warp fetches one row,",
+    //         "    // which coalesces to a single memory transaction",
+    //         "    const int i = threadIdx.x + blockIdx.y * blockDim.x;",
+    //         "    float x = input[i];",
+    //         "    output[i] = c * x;",
+    //         "}",
+    //     ],
+    //     statements: [
+    //         function() { this.identity(null); },
+    //         function() { this.locals.c = this.identity(2.0); },
+    //         function() { this.identity(null); },
+    //         function() { this.identity(null); },
+    //         function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x); },
+    //         function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
+    //         function() { this.arithmetic(this.locals.c * this.locals.x); },
+    //     ],
     // },
 
-    trivialBest: {
-        displayName: "Fully coalesced",
-        kernelArgs: {},
-        grid: {
-            dimGrid: {
-                x: 1,
-                y: 32,
-            },
-            dimBlock: {
-                x: 32,
-                y: 1,
-            },
-        },
-        memory: {
-            input: {
-                rows: 32,
-                columns: 32,
-            },
-        },
-        sourceLines: [
-            sassDisclaimer,
-            "__global__ void kernel(float* output, const float* input) {",
-            "    const float c = 2.0;",
-            "    // Each warp fetches one row,",
-            "    // which coalesces to a single memory transaction",
-            "    const int i = threadIdx.x + blockIdx.y * blockDim.x;",
-            "    float x = input[i];",
-            "    output[i] = c * x;",
-            "}",
-        ],
-        statements: [
-            function() { this.identity(null); },
-            function() { this.locals.c = this.identity(2.0); },
-            function() { this.identity(null); },
-            function() { this.identity(null); },
-            function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x); },
-            function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
-            function() { this.arithmetic(this.locals.c * this.locals.x); },
-        ],
-    },
-
-    trivialPoor: {
-        displayName: "Poorly coalescing",
-        kernelArgs: {
-            n: 32,
-        },
-        grid: {
-            dimGrid: {
-                x: 32,
-                y: 1,
-            },
-            dimBlock: {
-                x: 1,
-                y: 32,
-            },
-        },
-        memory: {
-            input: {
-                rows: 32,
-                columns: 32,
-            },
-        },
-        sourceLines: [
-            sassDisclaimer,
-            "__global__ void kernel(float* output, const float* input) {",
-            "    const float c = 2.0;",
-            "    // Each warp fetches one column,",
-            "    // which coalesces to 32 memory transactions",
-            "    const int i = n * threadIdx.y + blockIdx.x;",
-            "    float x = input[i];",
-            "    output[i] = c * x;",
-            "}",
-        ],
-        statements: [
-            function() { this.identity(null); },
-            function() { this.locals.c = this.identity(2.0); },
-            function() { this.identity(null); },
-            function() { this.identity(null); },
-            function() { this.locals.i = this.args.n * this.threadIdx.y + this.blockIdx.x; },
-            function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
-            function() { this.arithmetic(this.locals.c * this.locals.x); },
-        ],
-    },
+    // trivialPoor: {
+    //     displayName: "Poorly coalescing",
+    //     kernelArgs: {
+    //         n: 32,
+    //     },
+    //     grid: {
+    //         dimGrid: {
+    //             x: 32,
+    //             y: 1,
+    //         },
+    //         dimBlock: {
+    //             x: 1,
+    //             y: 32,
+    //         },
+    //     },
+    //     memory: {
+    //         input: {
+    //             rows: 32,
+    //             columns: 32,
+    //         },
+    //     },
+    //     sourceLines: [
+    //         sassDisclaimer,
+    //         "__global__ void kernel(float* output, const float* input) {",
+    //         "    const float c = 2.0;",
+    //         "    // Each warp fetches one column,",
+    //         "    // which coalesces to 32 memory transactions",
+    //         "    const int i = n * threadIdx.y + blockIdx.x;",
+    //         "    float x = input[i];",
+    //         "    output[i] = c * x;",
+    //         "}",
+    //     ],
+    //     statements: [
+    //         function() { this.identity(null); },
+    //         function() { this.locals.c = this.identity(2.0); },
+    //         function() { this.identity(null); },
+    //         function() { this.identity(null); },
+    //         function() { this.locals.i = this.args.n * this.threadIdx.y + this.blockIdx.x; },
+    //         function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
+    //         function() { this.arithmetic(this.locals.c * this.locals.x); },
+    //     ],
+    // },
 
 };
