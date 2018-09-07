@@ -1,4 +1,6 @@
+const sassDisclaimer = "// For simplicity, assume each kernel line maps one-to-one into compiled SASS assembly";
 const ppcStepV0Lines = [
+sassDisclaimer,
 "__global__ void kernel(float* output, const float* input, int n) {",
 "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
 "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
@@ -16,6 +18,7 @@ const ppcStepV0Lines = [
 // Closures that simulate the CUDA statements above
 // Each closure is applied with a CUDA context, which can then be referenced as 'this' in the closure
 const ppcStepV0Statements = [
+function() { this.identity(null); },
 function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x); },
 function() { this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y); },
 function() { this.locals.v = this.identity(Infinity); },
@@ -35,6 +38,7 @@ function() { this.identity(0); },
 ];
 
 const ppcStepV1Lines = [
+sassDisclaimer,
 "__global__ void kernel(float* output, const float* input, int n) {",
 "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
 "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
@@ -50,6 +54,7 @@ const ppcStepV1Lines = [
 ];
 
 const ppcStepV1Statements = [
+function() { this.identity(null); },
 function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x); },
 function() { this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y); },
 function() { this.locals.v = this.identity(Infinity); },
@@ -63,6 +68,7 @@ function() { this.identity(0); },
 ];
 
 const ppcStepV2Lines = [
+sassDisclaimer,
 "__global__ void kernel(float* output, const float* input, int n) {",
 "    const int ia = threadIdx.x;",
 "    const int ja = threadIdx.y;",
@@ -105,6 +111,7 @@ const ppcStepV2Lines = [
 ];
 
 const ppcStepV2Statements = [
+function() { this.identity(null); },
 function() { this.locals.ia = this.identity(this.threadIdx.x); },
 function() { this.locals.ja = this.identity(this.threadIdx.y); },
 function() { this.locals.ic = this.identity(this.blockIdx.x); },
@@ -300,6 +307,7 @@ const CUDAKernels = {
             },
         },
         sourceLines: [
+            sassDisclaimer,
             "__global__ void kernel(float* output, const float* input) {",
             "    const float c = 2.0;",
             "    // Each warp fetches one row,",
@@ -310,6 +318,7 @@ const CUDAKernels = {
             "}",
         ],
         statements: [
+            function() { this.identity(null); },
             function() { this.locals.c = this.identity(2.0); },
             function() { this.identity(null); },
             function() { this.identity(null); },
@@ -341,6 +350,7 @@ const CUDAKernels = {
             },
         },
         sourceLines: [
+            sassDisclaimer,
             "__global__ void kernel(float* output, const float* input) {",
             "    const float c = 2.0;",
             "    // Each warp fetches one column,",
@@ -351,6 +361,7 @@ const CUDAKernels = {
             "}",
         ],
         statements: [
+            function() { this.identity(null); },
             function() { this.locals.c = this.identity(2.0); },
             function() { this.identity(null); },
             function() { this.identity(null); },
