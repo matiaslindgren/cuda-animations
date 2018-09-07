@@ -131,7 +131,7 @@ __global__ void add_padding_v2(const float* r, float* d, int n, int nn) {
 __global__ void kernel_fully_coalesced(const float *in, float *out, int n) {
     const float c = 2.0;
     const int i = threadIdx.x + blockIdx.y * blockDim.x;
-    float x = input[i];
+    float x = in[i];
     out[i] = c * x;
 }
 
@@ -139,7 +139,7 @@ __global__ void kernel_fully_coalesced(const float *in, float *out, int n) {
 __global__ void kernel_poorly_coalesced(const float *in, float *out, int n) {
     const float c = 2.0;
     const int i = n * threadIdx.y + blockIdx.x;
-    float x = input[i];
+    float x = in[i];
     out[i] = c * x;
 }
 
@@ -224,8 +224,8 @@ void fully_coalesced(float* r, const float* d, int n) {
     CHECK(cudaMalloc(&rGPU, n * n * sizeof(float)));
     CHECK(cudaMemcpy(dGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
 
-    dim3 dimBlock(n, 1);
-    dim3 dimGrid(1, n);
+    dim3 dimBlock(32, 1);
+    dim3 dimGrid(1, 32);
     kernel_v1<<<dimGrid, dimBlock>>>(rGPU, dGPU, n);
     CHECK(cudaGetLastError());
 
@@ -243,8 +243,8 @@ void poorly_coalesced(float* r, const float* d, int n) {
     CHECK(cudaMalloc(&rGPU, n * n * sizeof(float)));
     CHECK(cudaMemcpy(dGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
 
-    dim3 dimBlock(1, n);
-    dim3 dimGrid(n, 1);
+    dim3 dimBlock(1, 32);
+    dim3 dimGrid(32, 1);
     kernel_v1<<<dimGrid, dimBlock>>>(rGPU, dGPU, n);
     CHECK(cudaGetLastError());
 
@@ -273,6 +273,7 @@ void print_row(const char* name, int i, size_t n, double time) {
 struct StepFunction {
     const char* name;
     void (*callable)(float*, const float*, int);
+    const size_t n;
 };
 
 
@@ -282,18 +283,18 @@ int main(int argc, char** argv) {
         iterations = std::stoi(argv[1]);
     }
 
-    const size_t n = BLOCKSIZE << 7;
     std::vector<StepFunction> step_functions = {
-        {"step_v0", step_v0},
-        {"step_v1", step_v1},
-        {"step_v2", step_v2},
-        {"fully_coalesced", fully_coalesced},
-        {"poorly_coalesced", poorly_coalesced},
+        {"step_v0", step_v0, BLOCKSIZE << 7},
+        {"step_v1", step_v1, BLOCKSIZE << 7},
+        {"step_v2", step_v2, BLOCKSIZE << 7},
+        {"fully_coalesced", fully_coalesced, BLOCKSIZE << 9},
+        {"poorly_coalesced", poorly_coalesced, BLOCKSIZE << 9},
     };
 
     print_header();
 
     for (auto func : step_functions) {
+        const size_t n = func.n;
         for (auto i = 0; i < iterations; ++i) {
             std::vector<float> data(n*n);
             std::generate(data.begin(), data.end(), next_float);
