@@ -128,22 +128,6 @@ __global__ void add_padding_v2(const float* r, float* d, int n, int nn) {
 }
 
 
-__global__ void kernel_fully_coalesced(const float *in, float *out, int n) {
-    const float c = 2.0;
-    const int i = threadIdx.x + blockIdx.y * blockDim.x;
-    float x = in[i];
-    out[i] = c * x;
-}
-
-
-__global__ void kernel_poorly_coalesced(const float *in, float *out, int n) {
-    const float c = 2.0;
-    const int i = n * threadIdx.y + blockIdx.x;
-    float x = in[i];
-    out[i] = c * x;
-}
-
-
 void step_v0(float* r, const float* d, int n) {
     // Allocate memory & copy data to GPU
     float* dGPU = NULL;
@@ -216,61 +200,23 @@ void step_v2(float* r, const float* d, int n) {
 }
 
 
-void fully_coalesced(float* r, const float* d, int n) {
-    float* dGPU = NULL;
-    float* rGPU = NULL;
-
-    CHECK(cudaMalloc(&dGPU, n * n * sizeof(float)));
-    CHECK(cudaMalloc(&rGPU, n * n * sizeof(float)));
-    CHECK(cudaMemcpy(dGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
-
-    dim3 dimBlock(32, 1);
-    dim3 dimGrid(1, 32);
-    kernel_v1<<<dimGrid, dimBlock>>>(rGPU, dGPU, n);
-    CHECK(cudaGetLastError());
-
-    CHECK(cudaMemcpy(r, rGPU, n * n * sizeof(float), cudaMemcpyDeviceToHost));
-    CHECK(cudaFree(dGPU));
-    CHECK(cudaFree(rGPU));
-}
-
-
-void poorly_coalesced(float* r, const float* d, int n) {
-    float* dGPU = NULL;
-    float* rGPU = NULL;
-
-    CHECK(cudaMalloc(&dGPU, n * n * sizeof(float)));
-    CHECK(cudaMalloc(&rGPU, n * n * sizeof(float)));
-    CHECK(cudaMemcpy(dGPU, d, n * n * sizeof(float), cudaMemcpyHostToDevice));
-
-    dim3 dimBlock(1, 32);
-    dim3 dimGrid(32, 1);
-    kernel_v1<<<dimGrid, dimBlock>>>(rGPU, dGPU, n);
-    CHECK(cudaGetLastError());
-
-    CHECK(cudaMemcpy(r, rGPU, n * n * sizeof(float), cudaMemcpyDeviceToHost));
-    CHECK(cudaFree(dGPU));
-    CHECK(cudaFree(rGPU));
-}
-
-
 void print_header() {
-    std::cout << std::setw(8) << "func"
-              << std::setw(8) << "iter"
-              << std::setw(8) << "n"
-              << std::setw(10) << "time (s)"
+    std::cout << std::setw(12) << "function"
+              << std::setw(12) << "iteration"
+              << std::setw(12) << "input size"
+              << std::setw(12) << "time (μs)"
               << std::endl;
 }
 void print_row(const char* name, int i, size_t n, double time) {
-    std::cout << std::setw(8) << name
-              << std::setw(8) << i
-              << std::setw(8) << n
-              << std::setw(10) << std::setprecision(3) << time
+    std::cout << std::setw(12) << name
+              << std::setw(12) << i
+              << std::setw(12) << n*n
+              << std::setw(12) << (int)(1e6 * time)
               << std::endl;
 }
 
 
-struct StepFunction {
+struct FunctionData {
     const char* name;
     void (*callable)(float*, const float*, int);
     const size_t n;
@@ -283,17 +229,15 @@ int main(int argc, char** argv) {
         iterations = std::stoi(argv[1]);
     }
 
-    std::vector<StepFunction> step_functions = {
+    std::vector<FunctionData> functions = {
         {"step_v0", step_v0, BLOCKSIZE << 7},
         {"step_v1", step_v1, BLOCKSIZE << 7},
         {"step_v2", step_v2, BLOCKSIZE << 7},
-        {"fully_coalesced", fully_coalesced, BLOCKSIZE << 9},
-        {"poorly_coalesced", poorly_coalesced, BLOCKSIZE << 9},
     };
 
     print_header();
 
-    for (auto func : step_functions) {
+    for (auto func : functions) {
         const size_t n = func.n;
         for (auto i = 0; i < iterations; ++i) {
             std::vector<float> data(n*n);
