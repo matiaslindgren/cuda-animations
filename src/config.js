@@ -78,7 +78,11 @@ const CONFIG = {
     memory: {
         // Empty space between each slot on all sides
         slotPadding: 1,
-        slotSize: 16,
+        slotSizes: {
+            min: 8,
+            max: 20,
+            step: 4,
+        },
         slotFillRGBA: [160, 160, 160, 0.2],
         // Amount of animation steps of the cooldown transition after touching a memory index
         coolDownPeriod: 10,

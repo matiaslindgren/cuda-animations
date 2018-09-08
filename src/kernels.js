@@ -269,8 +269,13 @@ const CUDAKernels = {
         },
         memory: {
             input: {
-                rows: 128,
+                rows: 32,
                 columns: 64,
+            },
+            // Increase padding between rows 15 and 16 to 4, in order to distinguish data in t and d
+            extraRowPadding: {
+                index: 15,
+                amount: 4,
             },
         },
         grid: {

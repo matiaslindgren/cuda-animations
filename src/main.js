@@ -16,7 +16,10 @@ var smCount = 1;
 var cacheLineCount = 0;
 // Simulated instruction latencies as SM cycles
 var instructionLatencies = "veryLow";
+// Should the kernel source lines be highlighted with the SM color or not
 var highlightKernelLines = "on";
+var memorySlotSize = 16;
+
 
 function makeSMlistBody(count) {
     function liWrap(s, liID) {
@@ -84,6 +87,17 @@ function makeHighlightSelectOptionsHTML() {
     return [makeOption("on"), makeOption("off")].join("\n");
 }
 
+function makeMemorySlotSizeSelectOptionsHTML(config) {
+    function makeOption(key) {
+        return '<option value="' + key + '"' + ((key === memorySlotSize) ? 'selected' : '') + '>DRAM slot size ' + key + '</option>';
+    }
+    const options = [];
+    for (let size = config.min; size <= config.max; size += config.step) {
+        options.push(makeOption(size));
+    }
+    return options.join("\n");
+}
+
 function parseStyle(style, prop, unit) {
     if (typeof unit === "undefined") {
         unit = "px";
@@ -121,6 +135,7 @@ function initUI() {
     const cacheSizeSelect = document.getElementById("cache-size-select");
     const latencySelect = document.getElementById("latency-select");
     const highlightSelect = document.getElementById("highlight-select");
+    const memorySlotSizeSelect = document.getElementById("memory-slot-size-select");
 
     pauseButton.addEventListener("click", _ => {
         pause();
@@ -159,6 +174,12 @@ function initUI() {
         device.setKernelHighlighting(highlightKernelLines === "on");
         clear(kernelCanvas, "hard");
     });
+    memorySlotSizeSelect.addEventListener("change", event => {
+        drawing = false;
+        memorySlotSize = parseInt(event.target.value);
+        pauseButton.value = "Pause";
+        restart();
+    });
 }
 
 function populateUI() {
@@ -174,6 +195,8 @@ function populateUI() {
     document.getElementById("latency-select").innerHTML = makeLatencySelectOptionsHTML();
     // Kernel line highlighting selector
     document.getElementById("highlight-select").innerHTML = makeHighlightSelectOptionsHTML();
+    // Memory slot size selector
+    document.getElementById("memory-slot-size-select").innerHTML = makeMemorySlotSizeSelectOptionsHTML(CONFIG.memory.slotSizes);
 }
 
 function initSimulation() {
@@ -195,7 +218,7 @@ function initSimulation() {
     const sourceLineHeight = parseStyle(sourceStyle, "line-height", "em");
 
     // Initialize simulated GPU
-    device = new Device(memoryCanvasInput, smCount, cacheLineCount, kernel.memory.input);
+    device = new Device(memoryCanvasInput, smCount, cacheLineCount, kernel.memory.input, memorySlotSize, kernel.memory.extraRowPadding);
     const grid = new Grid(kernel.grid.dimGrid, kernel.grid.dimBlock);
     const kernelArgs = Object.assign(kernel.kernelArgs, {
         output: function() { },
@@ -215,8 +238,11 @@ function initSimulation() {
 
     // Resize memory canvas and its container depending on the input array size
     const memoryCanvasContainer = document.getElementById("memoryCanvasContainer");
-    const canvasWidth = kernel.memory.input.columns * (CONFIG.memory.slotPadding + CONFIG.memory.slotSize);
-    const canvasHeight = kernel.memory.input.rows * (CONFIG.memory.slotPadding + CONFIG.memory.slotSize);
+    const canvasWidth = kernel.memory.input.columns * (CONFIG.memory.slotPadding + memorySlotSize);
+    let canvasHeight = kernel.memory.input.rows * (CONFIG.memory.slotPadding + memorySlotSize);
+    if (typeof kernel.memory.extraRowPadding !== "undefined") {
+        canvasHeight += kernel.memory.extraRowPadding.amount - CONFIG.memory.slotPadding;
+    }
     resetSize(memoryCanvasInput, canvasWidth, canvasHeight);
     resetSize(memoryCanvasContainer, canvasWidth, memoryCanvasContainer.height + canvasHeight);
 }
