@@ -16,6 +16,40 @@ The image below, taken from [7], provides a clear illustration:
 
 ![Coalescing memory accesses](img/coalescing_mem_access.png "Coalescing memory accesses [7]")
 
+## Benchmarks
+
+Some simple [benchmarking tools](cuda) are provided for running actual CUDA kernels of the simulated kernels.
+
+Most recent results:
+```
+Quadro K2200
+
+compute capability:           5
+global memory bus width:      128 bits
+streaming multiprocessors:    5
+maximum threads per SM:       2048
+L2 cache size:                2097152 bytes
+
+    function   iteration  input size  time (μs)
+-----------------------------------------------
+     step_v0           1    16777216     7280259
+     step_v0           2    16777216     7184349
+     step_v0           3    16777216     7187062
+     step_v0           4    16777216     7187541
+     step_v0           5    16777216     7184044
+     step_v1           1    16777216     1856605
+     step_v1           2    16777216     1855964
+     step_v1           3    16777216     1856726
+     step_v1           4    16777216     1856108
+     step_v1           5    16777216     1855794
+     step_v2           1    16777216      374867
+     step_v2           2    16777216      375245
+     step_v2           3    16777216      374816
+     step_v2           4    16777216      374948
+     step_v2           5    16777216      374669
+```
+
+
 ### Computational power vs. memory bandwidth
 
 Mei and Chu point out that while NVIDIA's GTX 980 (Maxwell architecture) has a computational power of 4612 GFlop/s, its theoretical memory bandwidth is only 224 GB/s [1][4].
