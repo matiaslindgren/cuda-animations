@@ -265,7 +265,7 @@ function initSimulation() {
 
 function clear(canvas, type) {
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = 'rgba(255, 255, 255, ' + ((type === "hard") ? 1.0 : 0.5) + ')';
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + ((type === "hard") ? 1.0 : 0.7) + ')';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
