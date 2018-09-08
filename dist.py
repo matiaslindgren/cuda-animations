@@ -8,7 +8,7 @@ SOURCE_FILES = (
     ("src/main.js", "assert"),
     ("src/lib.js", "assert"),
     ("src/config.js", ''),
-    ("src/kernels.js", ''),
+    ("src/kernels.js", 'assert'),
     ("src/main.css", ''),
 )
 
