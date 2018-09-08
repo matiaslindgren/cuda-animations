@@ -1,24 +1,21 @@
-const sassDisclaimer = "// For simplicity, assume each kernel line maps one-to-one into compiled SASS assembly";
 const ppcStepV0Lines = [
-sassDisclaimer,
-"__global__ void kernel(float* output, const float* input, int n) {",
+"__global__ void kernel(float* r, const float* d, int n) {",
 "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
 "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
 "    float v = HUGE_VALF;",
 "    for (int k = 0; k < n; ++k) {",
-"        float x = input[n*i + k];",
-"        float y = input[n*k + j];",
+"        float x = d[n*i + k];",
+"        float y = d[n*k + j];",
 "        float z = x + y;",
 "        v = min(v, z);",
 "    }",
-"    output[n*i + j] = v;",
+"    r[n*i + j] = v;",
 "}",
 ];
 
 // Closures that simulate the CUDA statements above
 // Each closure is applied with a CUDA context, which can then be referenced as 'this' in the closure
 const ppcStepV0Statements = [
-function() { this.identity(null); },
 function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x); },
 function() { this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y); },
 function() { this.locals.v = this.identity(Infinity); },
@@ -38,23 +35,21 @@ function() { this.identity(0); },
 ];
 
 const ppcStepV1Lines = [
-sassDisclaimer,
-"__global__ void kernel(float* output, const float* input, int n) {",
+"__global__ void kernel(float* r, const float* d, int n) {",
 "    const int i = threadIdx.x + blockIdx.x * blockDim.x;",
 "    const int j = threadIdx.y + blockIdx.y * blockDim.y;",
 "    float v = HUGE_VALF;",
 "    for (int k = 0; k < n; ++k) {",
-"        float x = input[n*j + k];",
-"        float y = input[n*k + i];",
+"        float x = d[n*j + k];",
+"        float y = d[n*k + i];",
 "        float z = x + y;",
 "        v = min(v, z);",
 "    }",
-"    output[n*j + i] = v;",
+"    r[n*j + i] = v;",
 "}",
 ];
 
 const ppcStepV1Statements = [
-function() { this.identity(null); },
 function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.x * this.blockDim.x); },
 function() { this.locals.j = this.arithmetic(this.threadIdx.y + this.blockIdx.y * this.blockDim.y); },
 function() { this.locals.v = this.identity(Infinity); },
@@ -68,8 +63,7 @@ function() { this.identity(0); },
 ];
 
 const ppcStepV2Lines = [
-sassDisclaimer,
-"__global__ void kernel(float* output, const float* input, int n) {",
+"__global__ void kernel(float* r, const float* d, int n) {",
 "    const int ia = threadIdx.x;",
 "    const int ja = threadIdx.y;",
 "    const int ic = blockIdx.x;",
@@ -94,32 +88,48 @@ sassDisclaimer,
 "            int j = jc * 64 + jb * 8 + ja;",
 "            y[jb] = d[n*k + j];",
 "        }",
-"        // for (int ib = 0; ib < 8; ++ib) {",
-"        //     for (int jb = 0; jb < 8; ++jb) {",
-"        //         v[ib][jb] = min(v[ib][jb], x[ib] + y[jb]);",
-"        //     }",
-"        // }",
+"        for (int ib = 0; ib < 8; ++ib) {",
+"            for (int jb = 0; jb < 8; ++jb) {",
+"                v[ib][jb] = min(v[ib][jb], x[ib] + y[jb]);",
+"            }",
+"        }",
 "    }",
 "    for (int ib = 0; ib < 8; ++ib) {",
 "        for (int jb = 0; jb < 8; ++jb) {",
 "            int i = ic * 64 + ib * 8 + ia;",
 "            int j = jc * 64 + jb * 8 + ja;",
-"            output[n*i + j] = v[ib][jb];",
+"            r[n*i + j] = v[ib][jb];",
 "        }",
 "    }",
 "}",
 ];
 
 const ppcStepV2Statements = [
-function() { this.identity(null); },
 function() { this.locals.ia = this.identity(this.threadIdx.x); },
 function() { this.locals.ja = this.identity(this.threadIdx.y); },
 function() { this.locals.ic = this.identity(this.blockIdx.x); },
 function() { this.locals.jc = this.identity(this.blockIdx.y); },
 function() { this.identity(null); },
-function() { this.locals.t = this.identity("arrayHandle"); },
+// Show only 16 first rows of t and d
+function() { this.locals.t = {dOffset: this.identity(16)}; },
 function() { this.identity(null); },
 function() { this.locals.v = this.identity(Array.from(new Array(8), _ => new Array(8))); },
+// Simulate population of v as a single, zero latency instruction,
+// In the animation, the highlighting simply "falls through" the for loops
+function() {
+    const v = this.locals.v;
+    for (let ib = 0; ib < 8; ++ib) {
+        for (let jb = 0; jb < 8; ++jb) {
+            v[ib][jb] = this.identity(Infinity);
+        }
+    }
+    assert(v.length === 8 && v.every(vv => vv.length === 8), "Bad initialization of v, incorrect length");
+},
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+/*
 function() { this.locals.ib = this.identity(0); },
 function() { this.locals.jb = this.identity(0); },
 function() {
@@ -131,6 +141,7 @@ function() {
 },
 function() { if (++this.locals.jb < 8) { this.jump(-1); } else { this.locals.jb = undefined; } },
 function() { if (++this.locals.ib < 8) { this.jump(-3); } else { this.locals.ib = undefined; } },
+*/
 function() { this.locals.k = this.identity(0); },
 function() { this.locals.x = this.identity(new Array(8)); },
 function() { this.locals.y = this.identity(new Array(8)); },
@@ -149,7 +160,8 @@ function() {
     assert(k < 32, "k too large");
     const i = this.locals.i;
     const x = this.locals.x;
-    x[ib] = this.arrayGet(this.args.input, n*n + n*k + i); // Get from t
+    const tOffset = n * this.locals.t.dOffset;
+    x[ib] = this.arrayGet(this.args.input, tOffset + n*k + i); // Get from t
 },
 function() { if (++this.locals.ib < 8) { this.jump(-2); } else { this.locals.ib = undefined; } },
 function() { this.locals.jb = this.identity(0); },
@@ -183,31 +195,28 @@ function() {
 },
 function() { if (++this.locals.jb < 8) { this.jump(-1); } else { this.locals.jb = undefined; } },
 function() { if (++this.locals.ib < 8) { this.jump(-3); } else { this.locals.ib = undefined; } },
-function() { if (++this.locals.k < this.args.n) { this.jump(-15); } else { this.locals.k = undefined; } },
 */
-function() { if (++this.locals.k < this.args.n) { this.jump(-10); } else { this.locals.k = undefined; } },
-function() { this.locals.ib = this.identity(0); },
-function() { this.locals.jb = this.identity(0); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
 function() {
-    const ia = this.locals.ia;
-    const ib = this.locals.ib;
-    const ic = this.locals.ic;
-    this.locals.i = this.arithmetic(ic * 64 + ib * 8 + ia);
+    // If the animation contain omitted rows, do not jump
+    if (++this.locals.k < this.args.n && this.locals.k < this.locals.t.dOffset) {
+        this.jump(-15);
+    } else {
+        this.locals.k = undefined;
+    }
 },
-function() {
-    const ja = this.locals.ja;
-    const jb = this.locals.jb;
-    const jc = this.locals.jc;
-    this.locals.j = this.arithmetic(jc * 64 + jb * 8 + ja);
-},
-function() {
-    const n = this.args.n;
-    const i = this.locals.i;
-    const j = this.locals.j;
-    this.arithmetic(n*i + j); // FIXME assign to output array
-},
-function() { if (++this.locals.jb < 8) { this.jump(-3); } else { this.locals.jb = undefined; } },
-function() { if (++this.locals.ib < 8) { this.jump(-5); } else { this.locals.ib = undefined; } },
+// Omit output writing simulation
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
+function() { this.identity(null); },
 ];
 
 const CUDAKernels = {
@@ -235,6 +244,7 @@ const CUDAKernels = {
         },
         sourceLines: ppcStepV0Lines,
         statements: ppcStepV0Statements,
+        sourceMessages: ['Source: <a href="http://ppc.cs.aalto.fi/ch4/v0/">Baseline</a>'],
     },
 
     ppcStepV1: {
@@ -260,6 +270,7 @@ const CUDAKernels = {
         },
         sourceLines: ppcStepV1Lines,
         statements: ppcStepV1Statements,
+        sourceMessages: ['Source: <a href="http://ppc.cs.aalto.fi/ch4/v1/">Better memory access pattern</a>'],
     },
 
     ppcStepV2: {
@@ -290,90 +301,17 @@ const CUDAKernels = {
         },
         sourceLines: ppcStepV2Lines,
         statements: ppcStepV2Statements,
+        memoryMessages: ["Showing only top 16 rows of d and r."],
+        sourceMessages: ['Source: <a href="http://ppc.cs.aalto.fi/ch4/v2/">Reuse in data registers</a>'],
     },
 
-    // trivialBest: {
-    //     displayName: "Fully coalesced",
-    //     kernelArgs: {},
-    //     grid: {
-    //         dimGrid: {
-    //             x: 1,
-    //             y: 32,
-    //         },
-    //         dimBlock: {
-    //             x: 32,
-    //             y: 1,
-    //         },
-    //     },
-    //     memory: {
-    //         input: {
-    //             rows: 32,
-    //             columns: 32,
-    //         },
-    //     },
-    //     sourceLines: [
-    //         sassDisclaimer,
-    //         "__global__ void kernel(float* output, const float* input) {",
-    //         "    const float c = 2.0;",
-    //         "    // Each warp fetches one row,",
-    //         "    // which coalesces to a single memory transaction",
-    //         "    const int i = threadIdx.x + blockIdx.y * blockDim.x;",
-    //         "    float x = input[i];",
-    //         "    output[i] = c * x;",
-    //         "}",
-    //     ],
-    //     statements: [
-    //         function() { this.identity(null); },
-    //         function() { this.locals.c = this.identity(2.0); },
-    //         function() { this.identity(null); },
-    //         function() { this.identity(null); },
-    //         function() { this.locals.i = this.arithmetic(this.threadIdx.x + this.blockIdx.y * this.blockDim.x); },
-    //         function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
-    //         function() { this.arithmetic(this.locals.c * this.locals.x); },
-    //     ],
-    // },
-
-    // trivialPoor: {
-    //     displayName: "Poorly coalescing",
-    //     kernelArgs: {
-    //         n: 32,
-    //     },
-    //     grid: {
-    //         dimGrid: {
-    //             x: 32,
-    //             y: 1,
-    //         },
-    //         dimBlock: {
-    //             x: 1,
-    //             y: 32,
-    //         },
-    //     },
-    //     memory: {
-    //         input: {
-    //             rows: 32,
-    //             columns: 32,
-    //         },
-    //     },
-    //     sourceLines: [
-    //         sassDisclaimer,
-    //         "__global__ void kernel(float* output, const float* input) {",
-    //         "    const float c = 2.0;",
-    //         "    // Each warp fetches one column,",
-    //         "    // which coalesces to 32 memory transactions",
-    //         "    const int i = n * threadIdx.y + blockIdx.x;",
-    //         "    float x = input[i];",
-    //         "    output[i] = c * x;",
-    //         "}",
-    //     ],
-    //     statements: [
-    //         function() { this.identity(null); },
-    //         function() { this.locals.c = this.identity(2.0); },
-    //         function() { this.identity(null); },
-    //         function() { this.identity(null); },
-    //         function() { this.locals.i = this.args.n * this.threadIdx.y + this.blockIdx.x; },
-    //         function() { this.locals.x = this.arrayGet(this.args.input, this.locals.i); },
-    //         function() { this.arithmetic(this.locals.c * this.locals.x); },
-    //     ],
-    // },
-
 };
+
+// Add messages for all kernel configs
+for (let kernel in CUDAKernels) {
+    if (typeof CUDAKernels[kernel].sourceMessages === "undefined") {
+        CUDAKernels[kernel].sourceMessages = [];
+    }
+    // Show SASS omission disclaimer above kernel source lines
+    CUDAKernels[kernel].sourceMessages.push("For simplicity, assume each kernel line maps one-to-one into compiled SASS assembly.");
+}

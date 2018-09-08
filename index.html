@@ -25,16 +25,19 @@
         </div>
         <div id="memoryCanvasContainer" class="column canvas-container">
             <h3><pre>Global device memory (DRAM)</pre></h3>
+            <pre hidden id="memoryMessages" class="kernel-message"></pre>
             <canvas id="memoryCanvasInput"></canvas>
         </div>
         <div id="SMCanvasContainer" class="column canvas-container">
             <h3><pre>Streaming multiprocessors (SM)</pre></h3>
+            <pre hidden id="SMMessages" class="kernel-message"></pre>
             <ul id="sm-list" class="sm-list">
             </ul>
             <div id="kernelSourceCanvasContainer" class="canvas-container">
                 <h3><pre>CUDA kernel</pre></h3>
-                    <pre id="kernelSource"></pre>
-                    <canvas id="kernelCanvas"></canvas>
+                <pre hidden id="sourceMessages" class="kernel-message"></pre>
+                <pre id="kernelSource"></pre>
+                <canvas id="kernelCanvas"></canvas>
             </div>
         </div>
         <script src="src/kernels.js"></script>

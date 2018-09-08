@@ -73,3 +73,7 @@ canvas {
     margin: 5px;
     padding: 5px;
 }
+
+pre.kernel-message {
+    white-space: pre-wrap;
+}

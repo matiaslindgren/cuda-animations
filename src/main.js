@@ -1,12 +1,14 @@
 "use strict";
 
 // All mutable global variables
+
 var memoryCanvasInput;
-//var memoryCanvasOutput;
 var kernelCanvas;
 var device;
 var drawing = true;
 var prevRenderFrameID;
+
+// Application state, mutated with menu bar elements
 
 // Choose default CUDA kernel from kernels.js
 var activeKernel = "ppcStepV0";
@@ -46,7 +48,7 @@ function makeSMlistBody(count) {
 
 function makeKernelSelectOptionsHTML(kernels) {
     function makeOption(key) {
-        return "<option value=\"" + key + "\">" + kernels[key].displayName + "</option>";
+        return "<option value=\"" + key + "\">CUDA kernel: " + kernels[key].displayName + "</option>";
     }
     // Create all kernels as options HTML, where the default kernel is first
     const kernelsNoDefault = Object.keys(kernels).filter(k => k !== activeKernel);
@@ -235,6 +237,20 @@ function initSimulation() {
     }
     device.setProgram(grid, program);
     device.setKernelHighlighting(highlightKernelLines === "on");
+
+    // Insert custom kernel descriptions/messages above canvases
+    for (let msgID of ["SMMessages", "memoryMessages", "sourceMessages"]) {
+        const element = document.getElementById(msgID);
+        const messages = kernel[msgID];
+        if (typeof messages !== "undefined") {
+            element.innerHTML = messages.join("\n\n");
+            element.hidden = false;
+        } else {
+            // Always hide possible, previous message
+            element.innerHTML = '';
+            element.hidden = true;
+        }
+    }
 
     // Resize memory canvas and its container depending on the input array size
     const memoryCanvasContainer = document.getElementById("memoryCanvasContainer");
