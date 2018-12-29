@@ -1,7 +1,5 @@
-"use strict";
-
 class Drawable {
-    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA) {
+    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA, overlayRGBA, overlayRatio) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -10,6 +8,15 @@ class Drawable {
         // Copy RGBA arrays, if given, else set to null
         this.strokeRGBA = (typeof strokeRGBA === "undefined") ? null : strokeRGBA.slice();
         this.fillRGBA = (typeof fillRGBA === "undefined") ? null : fillRGBA.slice();
+        // If overlayRGBA is given, the drawable will be partially overwritten by a rect of height overlayRatio * this.height, of color overlayRGBA.
+        if (typeof overlayRGBA !== "undefined") {
+            this.overlayRGBA = overlayRGBA;
+            this.overlayRatio = overlayRatio;
+
+        } else {
+            this.overlayRGBA = null;
+            this.overlayRatio = null;
+        }
     }
 
     draw() {
@@ -25,6 +32,12 @@ class Drawable {
         if (this.strokeRGBA !== null) {
             ctx.strokeStyle = "rgba(" + this.strokeRGBA.join(',') + ')';
             ctx.strokeRect(x, y, width, height);
+        }
+        if (this.overlayRGBA !== null) {
+            assert(typeof this.overlayRatio  !== "undefined" && this.overlayRatio !== null && this.overlayRatio >= 0 - 1e-6 && this.overlayRatio <= 1.0 + 1e-6, "if overlayRGBA is given, the overlayRatio must also be given and be in range [0, 1]", {name: "drawable.draw overlay", obj: {color: this.overlayRGBA, ratio: this.overlayRatio}});
+            ctx.fillStyle = "rgba(" + this.overlayRGBA.join(',') + ')';
+            const yOffset = (1.0 - this.overlayRatio) * height;
+            ctx.fillRect(x, y + yOffset, width, height - yOffset);
         }
     }
 }
@@ -44,27 +57,95 @@ class L2Cache {
         // Amount of words (graphical slots) in one cacheline
         this.lineSize = CONFIG.cache.L2CacheLineSize;
         // Device memory access instructions waiting to return
-        // Each element is an array of instructions, all waiting for the same index
-        this.memoryAccessQueue = [];
+        // Each key is a memory index that every instruction in the mapped array are waiting for.
+        // e.g. if several threads happen to request the same index `i`, we append the duplicate memory accesses to an array at key `i` instead of creating independent duplicates
+        this.memoryAccessQueue = new Map;
     }
 
     align(i) {
         return i - i % this.lineSize;
     }
 
+    // Memory transactions can be coalesced into 32, 64 or 128 byte transactions [2].
+    // For simplicity, it is assumed that all addressable memory slots are 4 bytes.
+    // Then, adjacent indexes can be coalesced in chunks of 8, 16 and 32 indexes.
+    // Returns the aligned cache lines
+    coalesceMemoryTransactions(instructions) {
+        // Reduction 1, align all memory access indexes from all threads to 32 byte lines
+        //let alignedIndexes = new Set;
+        let cacheLines32 = new Map;
+        instructions.forEach(instruction => {
+            const index = instruction.data.index;
+            const aligned32 = index - index % 8;
+            const line32 = cacheLines32.get(aligned32);
+            if (typeof line32 !== "undefined") {
+                // 32 byte cache line starting at `aligned32` exists, we can also fetch `index` with that line
+                line32.indexes.add(index);
+                line32.lineSize = 8;
+            } else {
+                // Add a 32 byte cache line starting at `aligned32` with `index` as only memory address
+                cacheLines32.set(aligned32, {indexes: new Set([index]), lineSize: 8});
+            }
+        });
+
+        // Reduction 2, align results to 64 bytes
+        let cacheLines64 = new Map;
+        cacheLines32.forEach((line32, aligned32) => {
+            const aligned64 = aligned32 - aligned32 % 16;
+            const line64 = cacheLines64.get(aligned64);
+            if (typeof line64 !== "undefined") {
+                // Cache line aligned to `aligned64` exists, we can merge it with another 32 byte cache line to fetch 64 bytes in one transaction
+                line32.indexes.forEach(index32 => line64.indexes.add(index32));
+                line64.lineSize = 16;
+            } else {
+                // 64 byte cache line does not exist, using a 32 byte cache line is still sufficient
+                cacheLines64.set(aligned64, {indexes: new Set(line32.indexes), lineSize: 8});
+            }
+        });
+
+        // Reduction 3, align results to 128 bytes
+        let cacheLines128 = new Map;
+        cacheLines64.forEach((line64, aligned64) => {
+            // NOTE line64 is 64 bytes wide only if it was merged with two 32 byte lines during reduction 2,
+            // it can still be 32 bytes if no pair of adjacent 32 byte lines was found
+            const aligned128 = aligned64 - aligned64 % 32;
+            const line128 = cacheLines128.get(aligned128);
+            if (typeof line128 !== "undefined") {
+                // Cache line aligned to `aligned128` exists, we can merge it with another 64 byte cache line to fetch 128 bytes in one transaction
+                line64.indexes.forEach(index64 => line128.indexes.add(index64));
+                line128.lineSize = 32;
+            } else {
+                // 128 byte cache line does not exist, no need to merge yet
+                cacheLines128.set(aligned128, {indexes: new Set(line64.indexes), lineSize: line64.lineSize});
+            }
+        });
+
+        // The amount cache lines is the minimum amount of required memory transactions to fetch all the indexes
+        // In the best case, all instructions coalesce to a single 128 byte transaction
+        // In the worst case, every instruction coalesce to 32 independent 32 byte transactions
+        assert(1 <= cacheLines128.size <= 32, "alignment failed, number of indexes aligned: " + cacheLines128.size + ", which is not in range [1, 32]");
+        return cacheLines128;
+    }
+
+
     step() {
         // Age all cache lines
         for (let i = 0; i < this.ages.length; ++i) {
             ++this.ages[i];
         }
-        // Add all completed memory fetches as cache lines
-        this.memoryAccessQueue.forEach(instructions => {
+
+        // Add fetched data from every completed memory access as cache lines
+        this.memoryAccessQueue.forEach((instructions, index) => {
+            // It is possible to have several memory access instructions to the same index
             instructions.forEach(instruction => {
                 if (instruction.isDone()) {
+                    // The DRAM index this memory access instruction is waiting data from
                     const memoryIndex = instruction.data.index;
-                    const lineIndex = this.getCachedIndex(memoryIndex);
+                    assert(memoryIndex === index, "unexpected index in memory access instruction, expected to be equal to memoryAccessQueue key " + index + ", but was " + memoryIndex);
+                    // Memory access complete, add cache line
+                    const lineIndex = this.getCachedIndex(index);
                     if (lineIndex < 0) {
-                        this.addNew(memoryIndex);
+                        this.addNew(index);
                     } else if (this.ages.length > 0) {
                         // Reset cache line age only if cache is enabled
                         this.ages[lineIndex] = 0;
@@ -72,19 +153,55 @@ class L2Cache {
                 }
             });
         });
-        // Delete all completed memory access instructions
-        this.memoryAccessQueue = this.memoryAccessQueue.filter(instructions => {
-            return !instructions.every(instr => instr.isDone());
+
+        // Drop all completed memory access instructions
+        Array.from(this.memoryAccessQueue.keys()).forEach(key => {
+            const instructions = this.memoryAccessQueue.get(key);
+            if (instructions.some(instr => instr.isDone())) {
+                this.memoryAccessQueue.delete(key)
+            }
         });
+
+        // Wait one cycle for all memory access instructions
+        for (let instructions of this.memoryAccessQueue.values()) {
+            instructions.forEach(instr => instr.cycle());
+        }
+
+        // Coalesce all new memory accesses of distinct indexes to cache lines with a width of 32, 64 or 128 bytes.
+        // Get a list of memory access instructions for every unique memory index.
+        const instructions = Array.from(this.memoryAccessQueue.values(), instructions => instructions[0])
+        // Check that we do not coalesce twice
+        const isCoalesced = instructions.some(instruction => {
+            const data = instruction.data;
+            assert(typeof data !== "undefined", "attempting to coalesce memory transactions, but instruction does not have data attributes attached", {name: "coalescing instruction", obj: instruction});
+            return (typeof data.coalesced !== "undefined" && data.coalesced);
+        });
+        if (!isCoalesced && instructions.length > 0) {
+            // Found new memory access instructions, requested by thread warps
+            const newCacheLines = this.coalesceMemoryTransactions(instructions);
+            console.log(newCacheLines);
+            // Compute the total latency of all transactions
+            // TODO simulate memory bandwidth limit here by controlling latency of each cache line independently
+            const coalescedLatency = newCacheLines.size * instructions[0].cyclesLeft;
+            // Expand the memory access queue with full cache lines
+            for (let [index, line] of newCacheLines.entries()) {
+                for (let i = index; i < index + line.lineSize; ++i) {
+                    // Assign the total latency to device memory access instructions for every thread, create new instructions if needed
+                    this.memoryAccessQueue.set(i, new Array);
+                    let queued = this.memoryAccessQueue.get(i);
+                    queued.push(Instruction.deviceMemoryAccess(i));
+                    for (let instruction of queued) {
+                        instruction.setLatency(coalescedLatency);
+                        instruction.data.coalesced = true;
+                    }
+                }
+            }
+        }
     }
 
     getCachedIndex(i) {
         const aligned = this.align(i) + 1;
         return this.lines.findIndex(cached => cached > 0 && aligned === cached);
-    }
-
-    getQueuedInstructions(i) {
-        return this.memoryAccessQueue.find(instructions => instructions[0].data.index === i);
     }
 
     addLine(i, j) {
@@ -115,18 +232,17 @@ class L2Cache {
     }
 
     queueMemoryAccess(i) {
-        let instructions = this.getQueuedInstructions(i);
-        if (typeof instructions !== "undefined") {
-            // Memory access at index i already queued
-            // Copy the instruction and add to queue
-            let instr = Object.assign(Instruction.empty(), instructions[0]);
-            instructions.push(instr);
-            return instr;
+        // Check if some memory accesses to index i are already pending
+        let newInstruction;
+        if (this.memoryAccessQueue.has(i)) {
+            // Memory access at index i already pending, copy instruction
+            newInstruction = Object.assign(Instruction.empty(), this.memoryAccessQueue.get(i)[0]);
+        } else {
+            // Queue is empty, create new instruction to access memory at index i
+            newInstruction = Instruction.deviceMemoryAccess(i);
+            this.memoryAccessQueue.set(i, [newInstruction]);
         }
-        // Queue is empty, create new instruction to access memory at index i
-        instructions = [Instruction.deviceMemoryAccess(i)];
-        this.memoryAccessQueue.push(instructions);
-        return instructions[0];
+        return newInstruction;
     }
 
     // Simulate a memory access through L2, return true if the index was in the cache.
@@ -147,12 +263,21 @@ class L2Cache {
 
     getCacheState(i) {
         if (this.getCachedIndex(i) >= 0) {
-            return "cached";
-        } else if (typeof this.getQueuedInstructions(i) !== "undefined") {
-            return "pendingMemoryAccess";
-        } else {
-            return "notInCache";
+            // DRAM memory index i is currently cached
+            return {type: "cached", completeRatio: 1.0};
         }
+        // DRAM memory index i is not currently cached, check if we have a memory access instruction waiting for it
+        let queuedInstructions = this.memoryAccessQueue.get(i);
+        if (typeof queuedInstructions !== "undefined") {
+            // Multiple memory accesses to a single index are coalesced to a single memory access,
+            // thus we can ignore all duplicate instructions and use the first one
+            let queuedInstruction = queuedInstructions[0];
+            assert(typeof queuedInstruction.completeRatio !== "undefined", "undefined completeratio for instruction", {name: "queued instruction", obj: queuedInstruction});
+            // Memory access instruction is pending, return the completion ratio
+            return {type: "pendingMemoryAccess", completeRatio: queuedInstruction.completeRatio};
+        }
+        // DRAM memory index is not in cache and we are not waiting for a memory access
+        return {type: "notInCache", completeRatio: 0.0};
     }
 
     clear() {
@@ -230,6 +355,7 @@ class CUDAKernelContext {
 }
 
 // Drawable, simulated area of GPU DRAM.
+// TODO (multiple drawable instances not yet working)
 // Several DeviceMemory instances can be defined, e.g. for representing an input and output array
 class DeviceMemory extends Drawable {
     constructor(x, y, canvas, inputDim, slotSize, extraPadding) {
@@ -281,59 +407,45 @@ class MemorySlot extends Drawable {
         super(...drawableArgs);
         this.index = index;
         this.value = value;
-        this.hotness = 0;
         // Copy default color
         this.defaultColor = this.fillRGBA.slice();
         this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
-        this.touchedColor = CONFIG.cache.cachedStateRGBA.slice();
-        this.touchedColor[3] = 0.8;
-        this.pendingColor = CONFIG.cache.pendingStateRGBA.slice();
-        this.coolDownPeriod = CONFIG.memory.coolDownPeriod;
-        this.coolDownStep = (1.0 - this.cachedColor[3]) / (this.coolDownPeriod + 1);
     }
 
     // Simulate a memory access to this index
     touch() {
-        this.hotness = this.coolDownPeriod;
-        this.fillRGBA = this.touchedColor.slice();
     }
 
     // Update slot cache status to highlight cached slots in rendering
     setCachedState(state) {
-        let newColor;
-        switch(state) {
+        switch(state.type) {
             case "cached":
-                newColor = this.cachedColor;
+                this.fillRGBA = this.cachedColor.slice();
+                this.overlayRGBA = null;
+                this.overlayRatio = null;
                 break;
             case "pendingMemoryAccess":
-                newColor = this.pendingColor;
+                this.fillRGBA = this.defaultColor.slice();
+                this.overlayRGBA = this.cachedColor.slice();
+                this.overlayRatio = state.completeRatio;
                 break;
             case "notInCache":
-                newColor= this.defaultColor;
+                this.fillRGBA = this.defaultColor.slice();
+                this.overlayRGBA = null;
+                this.overlayRatio = null;
                 break;
             default:
                 console.error("unknown cache state: ", state);
                 break;
-        }
-        if (this.hotness === 0) {
-            this.fillRGBA = newColor.slice();
         }
     }
 
     // Animation step
     step() {
         this.draw();
-        if (this.hotness > 0) {
-            if (--this.hotness === 0) {
-                this.clear();
-            } else {
-                this.fillRGBA[3] -= this.coolDownStep;
-            }
-        }
     }
 
     clear() {
-        this.hotness = 0;
         this.fillRGBA = this.defaultColor.slice();
     }
 }
@@ -420,7 +532,10 @@ class Thread {
             this.statement = null;
         } else {
             // Continue waiting for instruction to complete
-            this.instruction.cycle();
+            // Do not advance the cycle counters for memory access instructions since they are controlled by the L2Cache
+            if (!this.instruction.name.endsWith("memoryAccess")) {
+                this.instruction.cycle();
+            }
         }
     }
 }
@@ -463,49 +578,6 @@ class Warp {
         ++this.programCounter;
     }
 
-    // Memory transactions can be coalesced into 32, 64 or 128 byte transactions [2].
-    // For simplicity, it is assumed that all addressable memory slots are 4 bytes.
-    // Then, adjacent indexes can be coalesced in chunks of 8, 16 and 32 indexes.
-    coalesceMemoryTransactions() {
-        // Do not coalesce again if warp is currently waiting for a coalesced memory access
-        const isCoalesced = this.threads.some(t => {
-            assert(typeof t.instruction.data !== "undefined", "attempting to coalesce memory transactions, but warp threads do not have data attributes attached to instructions");
-            const data = t.instruction.data;
-            return (typeof data.coalesced !== "undefined" && data.coalesced);
-        });
-        if (isCoalesced) {
-            return;
-        }
-        // Reduction 1, align all memory access indexes from all threads to 32 bytes
-        let alignedIndexes = new Set;
-        this.threads.forEach(t => {
-            const index = t.instruction.data.index;
-            const aligned = index - index % 8;
-            alignedIndexes.add(aligned);
-        });
-        // Reduction 2, align results to 64 bytes
-        let alignedIndexes2 = new Set;
-        alignedIndexes.forEach(index => {
-            const aligned = index - index % 16;
-            alignedIndexes2.add(aligned);
-        });
-        // Reduction 3, align results to 128 bytes
-        alignedIndexes = new Set;
-        alignedIndexes2.forEach(index => {
-            const aligned = index - index % 32;
-            alignedIndexes.add(aligned);
-        });
-        assert(alignedIndexes.size > 0 && alignedIndexes.size <= 32, "alignment failed, indexes aligned: " + alignedIndexes.size);
-        // The amount of remaining indexes is the minimum amount of required memory transactions
-        const coalescedLatency = alignedIndexes.size * this.threads[0].instruction.cyclesLeft;
-        // Assign new latencies to device memory access instructions
-        this.threads.forEach(t => {
-            t.instruction.cyclesLeft = coalescedLatency;
-            // Coalesce only once per new device memory access instruction
-            t.instruction.data.coalesced = true;
-        });
-    }
-
     // All threads in a warp do one cycle in parallel
     cycle() {
         this.threads.forEach(t => t.cycle());
@@ -517,13 +589,6 @@ class Warp {
                 case "jump":
                     assert(this.threads.every(t => t.instruction.name === "jump"), "only warp wide jump instructions supported");
                     this.programCounter += instr.data.jumpOffset + Math.sign(instr.data.jumpOffset);
-                    break;
-                // If the warp threads are doing a memory access, simulate possible coalescing latency
-                case "deviceMemoryAccess":
-                case "cachedMemoryAccess":
-                    assert(this.threads.every(t => t.instruction.name === "deviceMemoryAccess" || t.instruction.name === "cachedMemoryAccess"), "device memory accesses must be warp wide", {name: "Warp.threads", obj: this.threads});
-                    // Coalesce all memory accesses if not already coalesced
-                    this.coalesceMemoryTransactions();
                     break;
             }
         }
@@ -542,11 +607,13 @@ class Warp {
 // latency > 0 : instruction that requires 'latency' amount of SM cycles to complete
 // latency = 0 : instruction is complete
 // latency < 0 : instruction is a zero latency instruction, which can be executed an arbitrary amount of times within an SM cycle
+// TODO simulate memory bandwidth limit by reducing cycle counters of only a limited amount of memory access instructions once
+// TODO when threads are waiting for a memory access instruction to complete, the control should be in L2Cache or DeviceMemory
 class Instruction {
     constructor(name, latency, data) {
         this.name = name;
-        this.cyclesLeft = latency || 0;
         this.data = data || {};
+        this.setLatency(latency);
     }
 
     isDone() {
@@ -556,7 +623,17 @@ class Instruction {
     cycle() {
         if (this.cyclesLeft > 0) {
             --this.cyclesLeft;
+            this.completeRatio += this.completeRatioStep;
         }
+    }
+
+    setLatency(latency) {
+        this.cyclesLeft = latency || 0;
+        assert(this.cyclesLeft >= -1, "invalid latency value", {name: "Instruction", obj: this});
+        this.maxCycles = this.cyclesLeft;
+        // cyclesLeft in range [0, 1]
+        this.completeRatio = 0.0;
+        this.completeRatioStep = (this.maxCycles > 0) ? 1.0 / this.maxCycles : 0.0;
     }
 
     // Dummy instruction with zero latency
@@ -853,9 +930,6 @@ class Device {
     }
 
     step() {
-        this.L2Cache.step();
-        const L2CacheStateHandle = this.L2Cache.getCacheState.bind(this.L2Cache);
-        this.memory.step(L2CacheStateHandle);
         this.multiprocessors.forEach((sm, smIndex) => {
             sm.step();
             // Update line highlights for each warp that has started executing
@@ -867,6 +941,9 @@ class Device {
             }
         });
         this.kernelSource.step();
+        this.L2Cache.step();
+        const L2CacheStateHandle = this.L2Cache.getCacheState.bind(this.L2Cache);
+        this.memory.step(L2CacheStateHandle);
     }
 
     // Revert memory cell state colors
