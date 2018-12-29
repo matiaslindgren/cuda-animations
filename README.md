@@ -54,8 +54,7 @@ The image below, taken from [7], provides a clear illustration:
 
 Mei and Chu point out that while NVIDIA's GTX 980 (Maxwell architecture) has a computational power of 4612 GFlop/s, its theoretical memory bandwidth is only 224 GB/s [1][4].
 It seems that this gap has only increased on NVIDIA's GTX 1080 card (Pascal architecture), which NVIDIA reports having a computational power of 8873 GFlop/s, while the theoretical memory bandwidth is limited to 320 GB/s [5].
-With the newest Volta architecture, NVIDIA reports that they have increased the computational power up to 15700 GFlop/s for 32-bit floating point numbers, while the new HBM2 memory subsystem is reported to enable 900 GB/s peak memory bandwidth [6].
-Another significant change they describe is the merging of the on-chip shared memory and L1 caches, reducing the significance of manual caching management using shared memory.
+On Volta cards, the computational power has been increased to 15700 GFlop/s for 32-bit floating point numbers, while the memory subsystem is reported to enable 900 GB/s peak memory bandwidth [6].
 
 ## References
 
