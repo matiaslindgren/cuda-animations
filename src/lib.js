@@ -1,5 +1,6 @@
 class Drawable {
-    constructor(x, y, width, height, canvas, strokeRGBA, fillRGBA, overlayRGBA, overlayRatio) {
+    constructor(label, x, y, width, height, canvas, strokeRGBA, fillRGBA) {
+        this.label = label;
         this.x = x;
         this.y = y;
         this.width = width;
@@ -8,15 +9,6 @@ class Drawable {
         // Copy RGBA arrays, if given, else set to null
         this.strokeRGBA = (typeof strokeRGBA === "undefined") ? null : strokeRGBA.slice();
         this.fillRGBA = (typeof fillRGBA === "undefined") ? null : fillRGBA.slice();
-        // If overlayRGBA is given, the drawable will be partially overwritten by a rect of height overlayRatio * this.height, of color overlayRGBA.
-        if (typeof overlayRGBA !== "undefined") {
-            this.overlayRGBA = overlayRGBA;
-            this.overlayRatio = overlayRatio;
-
-        } else {
-            this.overlayRGBA = null;
-            this.overlayRatio = null;
-        }
     }
 
     draw() {
@@ -25,6 +17,7 @@ class Drawable {
         const width = this.width;
         const height = this.height;
         const ctx = this.canvasContext;
+        assert([x, y, width, height, ctx].every(val => typeof val !== "undefined"), "Drawable instances must always have defined x, y, width, height, and canvasContext.", {name: "Drawable", obj: this});
         if (this.fillRGBA !== null) {
             ctx.fillStyle = "rgba(" + this.fillRGBA.join(',') + ')';
             ctx.fillRect(x, y, width, height);
@@ -32,12 +25,6 @@ class Drawable {
         if (this.strokeRGBA !== null) {
             ctx.strokeStyle = "rgba(" + this.strokeRGBA.join(',') + ')';
             ctx.strokeRect(x, y, width, height);
-        }
-        if (this.overlayRGBA !== null) {
-            assert(typeof this.overlayRatio  !== "undefined" && this.overlayRatio !== null && this.overlayRatio >= 0 - 1e-6 && this.overlayRatio <= 1.0 + 1e-6, "if overlayRGBA is given, the overlayRatio must also be given and be in range [0, 1]", {name: "drawable.draw overlay", obj: {color: this.overlayRGBA, ratio: this.overlayRatio}});
-            ctx.fillStyle = "rgba(" + this.overlayRGBA.join(',') + ')';
-            const yOffset = (1.0 - this.overlayRatio) * height;
-            ctx.fillRect(x, y + yOffset, width, height - yOffset);
         }
     }
 }
@@ -60,10 +47,18 @@ class L2Cache {
         // Each key is a memory index that every instruction in the mapped array are waiting for.
         // e.g. if several threads happen to request the same index `i`, we append the duplicate memory accesses to an array at key `i` instead of creating independent duplicates
         this.memoryAccessQueue = new Map;
+        // Same but for cached indexes
+        this.cacheAccessQueue = new Map;
     }
 
     align(i) {
         return i - i % this.lineSize;
+    }
+
+    // Iterate over values of all memory access queues
+    *allQueuedInstructions() {
+        yield* this.memoryAccessQueue.values();
+        yield* this.cacheAccessQueue.values();
     }
 
     // Memory transactions can be coalesced into 32, 64 or 128 byte transactions [2].
@@ -72,9 +67,8 @@ class L2Cache {
     // Returns the aligned cache lines
     coalesceMemoryTransactions(instructions) {
         // Reduction 1, align all memory access indexes from all threads to 32 byte lines
-        //let alignedIndexes = new Set;
         let cacheLines32 = new Map;
-        instructions.forEach(instruction => {
+        for (let instruction of instructions) {
             const index = instruction.data.index;
             const aligned32 = index - index % 8;
             const line32 = cacheLines32.get(aligned32);
@@ -86,39 +80,61 @@ class L2Cache {
                 // Add a 32 byte cache line starting at `aligned32` with `index` as only memory address
                 cacheLines32.set(aligned32, {indexes: new Set([index]), lineSize: 8});
             }
-        });
+        }
 
         // Reduction 2, align results to 64 bytes
         let cacheLines64 = new Map;
-        cacheLines32.forEach((line32, aligned32) => {
+        for (let [aligned32, line32] of cacheLines32.entries()) {
             const aligned64 = aligned32 - aligned32 % 16;
-            const line64 = cacheLines64.get(aligned64);
-            if (typeof line64 !== "undefined") {
-                // Cache line aligned to `aligned64` exists, we can merge it with another 32 byte cache line to fetch 64 bytes in one transaction
-                line32.indexes.forEach(index32 => line64.indexes.add(index32));
-                line64.lineSize = 16;
-            } else {
-                // 64 byte cache line does not exist, using a 32 byte cache line is still sufficient
-                cacheLines64.set(aligned64, {indexes: new Set(line32.indexes), lineSize: 8});
+            if (cacheLines64.has(aligned64)) {
+                // line32 has already been coalesced with another 32 byte line
+                continue;
             }
-        });
+            // Get 32 byte line left to line32
+            const line32left = cacheLines32.get(aligned64);
+            if (typeof line32left === "undefined" || !disjoint(line32.indexes, line32left.indexes)) {
+                // No disjoint 32 byte lines to merge, add single 32 byte line
+                cacheLines64.set(aligned32, line32);
+            } else {
+                // We can merge two 32 byte cache lines to fetch 64 bytes in one transaction
+                const lineIndexes = new Set;
+                for (let index of line32.indexes) {
+                    lineIndexes.add(index);
+                }
+                for (let index of line32left.indexes) {
+                    lineIndexes.add(index);
+                }
+                cacheLines64.set(aligned64, {indexes: lineIndexes, lineSize: 16});
+            }
+        }
 
         // Reduction 3, align results to 128 bytes
         let cacheLines128 = new Map;
-        cacheLines64.forEach((line64, aligned64) => {
+        for (let [aligned64, line64] of cacheLines64.entries()) {
             // NOTE line64 is 64 bytes wide only if it was merged with two 32 byte lines during reduction 2,
             // it can still be 32 bytes if no pair of adjacent 32 byte lines was found
             const aligned128 = aligned64 - aligned64 % 32;
-            const line128 = cacheLines128.get(aligned128);
-            if (typeof line128 !== "undefined") {
-                // Cache line aligned to `aligned128` exists, we can merge it with another 64 byte cache line to fetch 128 bytes in one transaction
-                line64.indexes.forEach(index64 => line128.indexes.add(index64));
-                line128.lineSize = 32;
-            } else {
-                // 128 byte cache line does not exist, no need to merge yet
-                cacheLines128.set(aligned128, {indexes: new Set(line64.indexes), lineSize: line64.lineSize});
+            if (cacheLines128.has(aligned128)) {
+                // line64 has already been coalesced with another 64 byte line
+                continue;
             }
-        });
+            // Get 64 byte line left to line64
+            const line64left = cacheLines64.get(aligned128);
+            if (typeof line64left === "undefined" || !disjoint(line64.indexes, line64left.indexes)) {
+                // No disjoint 64 byte lines to merge, add single 64 byte line
+                cacheLines128.set(aligned64, line64);
+            } else {
+                // We can merge two 64 byte cache lines to fetch 128 bytes in one transaction
+                const lineIndexes = new Set;
+                for (let index of line64.indexes) {
+                    lineIndexes.add(index);
+                }
+                for (let index of line64left.indexes) {
+                    lineIndexes.add(index);
+                }
+                cacheLines128.set(aligned128, {indexes: lineIndexes, lineSize: 32});
+            }
+        }
 
         // The amount cache lines is the minimum amount of required memory transactions to fetch all the indexes
         // In the best case, all instructions coalesce to a single 128 byte transaction
@@ -127,76 +143,117 @@ class L2Cache {
         return cacheLines128;
     }
 
+    coalesceAndMergeCacheLines() {
+        // Coalesce all new memory accesses of distinct indexes to cache lines with a width of 32, 64 or 128 bytes.
+        // Get a list of memory access instructions for every unique memory index.
+        const instructions = Array.from(this.memoryAccessQueue.values(), instructions => instructions[0])
+        // Choose only uncoalesced instructions so we wont coalesce twice
+        const unCoalesced = instructions.filter(instruction => {
+            assert(typeof instruction.data !== "undefined", "attempting to coalesce memory transactions, but instruction does not have data attributes attached", {name: "in L2Cache.coalesceAndMergeCacheLines, bad Instruction", obj: instruction});
+            return !instruction.data.coalesced;
+        });
+        if (unCoalesced.length === 0) {
+            return;
+        }
+
+        // Simulate memory transaction coalescing by merging adjacent memory access instructions into 32, 64, and 128 byte cache lines
+        const newCacheLines = this.coalesceMemoryTransactions(unCoalesced);
+        // Simulate coalesced transaction latency reduction by multiplying the latency of one memory access instruction with the amount of coalesced cache lines
+        // TODO simulate memory bandwidth limit somewhere here by allowing through only a limited total width of cache lines at any time.
+        // Currently, we assume that all cache lines are loaded in unison and increasing the amount of cache lines just looks like all lines become slower
+        const coalescedLatency = newCacheLines.size * unCoalesced[0].cyclesLeft;
+        assert(coalescedLatency > 0 && "coalesced memory access latency must be positive");
+
+        // The memory access queue currently has instructions for fetching single indexes from DRAM.
+        // Now, add every index from the coalesced cache lines as new instructions, but set the latency for all to a single, reduced latency
+        for (let [index, line] of newCacheLines.entries()) {
+            for (let i = index; i < index + line.lineSize; ++i) {
+                // Assign the total latency to device memory access instructions for every thread
+                // NOTE do not overwrite existing deviceMemoryAccess instructions since they are the only reference Thread instances have for checking if their memory accesses have completed
+                if (!this.memoryAccessQueue.has(i)) {
+                    this.memoryAccessQueue.set(i, new Array);
+                }
+                let queued = this.memoryAccessQueue.get(i);
+                queued.push(Instruction.deviceMemoryAccess(i));
+                for (let instruction of queued) {
+                    instruction.setLatency(coalescedLatency);
+                    instruction.data.coalesced = true;
+                }
+            }
+        }
+    }
+
+    // Add fetched data from every completed memory access as 32 byte cache lines
+    updateCacheLines() {
+        let completedInstructions = new Array;
+        for (const [index, instructions] of this.memoryAccessQueue.entries()) {
+            for (let instruction of instructions) {
+                if (instruction.isDone()) {
+                    // Memory access complete, add memory index as cache line
+                    const memoryIndex = instruction.data.index;
+                    assert(memoryIndex === index, "unexpected index in memory access instruction, expected to be equal to memoryAccessQueue key " + index + ", but was " + memoryIndex);
+                    const lineIndex = this.getCachedIndex(index);
+                    if (lineIndex < 0) {
+                        this.addNew(index);
+                    } else {
+                        // Index is already in cache, reset line age if the cache is enabled
+                        if (this.ages.length > 0) {
+                            this.ages[lineIndex] = 0;
+                        }
+                    }
+                    completedInstructions.push(instruction);
+                }
+            }
+        }
+        return completedInstructions;
+    }
 
     step() {
+        // Get all device memory instructions that have completed waiting
+        let completedInstructions = this.updateCacheLines();
+
+        // Add completed cache accesses (for deletion)
+        for (const instructions of this.cacheAccessQueue.values()) {
+            for (const instruction of instructions) {
+                if (instruction.isDone()) {
+                    completedInstructions.push(instruction);
+                }
+            }
+        }
+
+        // Drop all completed memory access instructions
+        for (let instruction of completedInstructions) {
+            assert(instruction.name.startsWith("device") || instruction.name.startsWith("cache"), "unknown memory instruction scheduled for deletion, should be device or cache access", {name: "Instruction", obj: instruction});
+            assert(instruction.isDone(), "about to drop incomplete instruction, should only drop completed instructions", {name: "L2Cache.step, Instruction", obj: instruction});
+            if (instruction.name.startsWith("device")) {
+                this.memoryAccessQueue.delete(instruction.data.index);
+            } else {
+                this.cacheAccessQueue.delete(instruction.data.index);
+            }
+        }
+
+        this.coalesceAndMergeCacheLines()
+
+        // Wait one cycle for all memory access instructions
+        for (const instructions of this.allQueuedInstructions()) {
+            assert(instructions.every(instr => !instr.isDone()), "memory access queues cannot contain finished memory access instructions before advancing the cycle counter");
+            for (const instruction of instructions) {
+                instruction.cycle();
+            }
+        }
+
         // Age all cache lines
         for (let i = 0; i < this.ages.length; ++i) {
             ++this.ages[i];
         }
 
-        // Add fetched data from every completed memory access as cache lines
-        this.memoryAccessQueue.forEach((instructions, index) => {
-            // It is possible to have several memory access instructions to the same index
-            instructions.forEach(instruction => {
-                if (instruction.isDone()) {
-                    // The DRAM index this memory access instruction is waiting data from
-                    const memoryIndex = instruction.data.index;
-                    assert(memoryIndex === index, "unexpected index in memory access instruction, expected to be equal to memoryAccessQueue key " + index + ", but was " + memoryIndex);
-                    // Memory access complete, add cache line
-                    const lineIndex = this.getCachedIndex(index);
-                    if (lineIndex < 0) {
-                        this.addNew(index);
-                    } else if (this.ages.length > 0) {
-                        // Reset cache line age only if cache is enabled
-                        this.ages[lineIndex] = 0;
-                    }
-                }
-            });
+        // Filter away all memory access indexes that simulate coalescing memory transactions
+        // i.e. return all completed cached and device memory instructions that were requested by some thread
+        return completedInstructions.filter(instruction => {
+            const SM_ID = instruction.data.SM_ID;
+            if (typeof SM_ID !== "undefined") assert(SM_ID > 0, "SM_IDs should all start at 1", {name: "during filtering of L2 completed memory instructions, Instruction", obj: instruction});
+            return typeof SM_ID !== "undefined";
         });
-
-        // Drop all completed memory access instructions
-        Array.from(this.memoryAccessQueue.keys()).forEach(key => {
-            const instructions = this.memoryAccessQueue.get(key);
-            if (instructions.some(instr => instr.isDone())) {
-                this.memoryAccessQueue.delete(key)
-            }
-        });
-
-        // Wait one cycle for all memory access instructions
-        for (let instructions of this.memoryAccessQueue.values()) {
-            instructions.forEach(instr => instr.cycle());
-        }
-
-        // Coalesce all new memory accesses of distinct indexes to cache lines with a width of 32, 64 or 128 bytes.
-        // Get a list of memory access instructions for every unique memory index.
-        const instructions = Array.from(this.memoryAccessQueue.values(), instructions => instructions[0])
-        // Check that we do not coalesce twice
-        const isCoalesced = instructions.some(instruction => {
-            const data = instruction.data;
-            assert(typeof data !== "undefined", "attempting to coalesce memory transactions, but instruction does not have data attributes attached", {name: "coalescing instruction", obj: instruction});
-            return (typeof data.coalesced !== "undefined" && data.coalesced);
-        });
-        if (!isCoalesced && instructions.length > 0) {
-            // Found new memory access instructions, requested by thread warps
-            const newCacheLines = this.coalesceMemoryTransactions(instructions);
-            console.log(newCacheLines);
-            // Compute the total latency of all transactions
-            // TODO simulate memory bandwidth limit here by controlling latency of each cache line independently
-            const coalescedLatency = newCacheLines.size * instructions[0].cyclesLeft;
-            // Expand the memory access queue with full cache lines
-            for (let [index, line] of newCacheLines.entries()) {
-                for (let i = index; i < index + line.lineSize; ++i) {
-                    // Assign the total latency to device memory access instructions for every thread, create new instructions if needed
-                    this.memoryAccessQueue.set(i, new Array);
-                    let queued = this.memoryAccessQueue.get(i);
-                    queued.push(Instruction.deviceMemoryAccess(i));
-                    for (let instruction of queued) {
-                        instruction.setLatency(coalescedLatency);
-                        instruction.data.coalesced = true;
-                    }
-                }
-            }
-        }
     }
 
     getCachedIndex(i) {
@@ -231,32 +288,47 @@ class L2Cache {
         this.addLine(oldestIndex, i);
     }
 
-    queueMemoryAccess(i) {
-        // Check if some memory accesses to index i are already pending
-        let newInstruction;
-        if (this.memoryAccessQueue.has(i)) {
-            // Memory access at index i already pending, copy instruction
-            newInstruction = Object.assign(Instruction.empty(), this.memoryAccessQueue.get(i)[0]);
+    // When we already know DRAM index i is not cached, we can queue a device memory access
+    queueMemoryAccess(i, SM_ID) {
+        // Every memory access will be recorded, even if a cache line retrieval is already pending to that index
+        let newInstruction = Instruction.deviceMemoryAccess(i, SM_ID);
+        if (!this.memoryAccessQueue.has(i)) {
+            // We are not currently waiting for a memory access to index i
+            this.memoryAccessQueue.set(i, new Array);
         } else {
-            // Queue is empty, create new instruction to access memory at index i
-            newInstruction = Instruction.deviceMemoryAccess(i);
-            this.memoryAccessQueue.set(i, [newInstruction]);
+            // Memory access at index i already pending, we can reduce the latency of the new instruction to equal that of the oldest pending instruction
+            // This means they will complete at the same time
+            const oldestInstruction = this.memoryAccessQueue.get(i)[0];
+            newInstruction.setLatency(oldestInstruction.cyclesLeft);
         }
+        this.memoryAccessQueue.get(i).push(newInstruction);
+        return newInstruction;
+    }
+
+    queueCacheAccess(i, SM_ID) {
+        let newInstruction = Instruction.cachedMemoryAccess(i, SM_ID);
+        if (!this.cacheAccessQueue.has(i)) {
+            this.cacheAccessQueue.set(i, new Array);
+        } else {
+            const oldestInstruction = this.cacheAccessQueue.get(i)[0];
+            newInstruction.setLatency(oldestInstruction.cyclesLeft);
+        }
+        this.cacheAccessQueue.get(i).push(newInstruction);
         return newInstruction;
     }
 
     // Simulate a memory access through L2, return true if the index was in the cache.
     // Also update the LRU age of the line i belongs to.
-    fetch(i) {
+    fetch(SM_ID, i) {
         let fetchInstruction;
         const j = this.getCachedIndex(i);
         if (j < 0) {
             // i was not cached, create memory fetch and add to queue
-            fetchInstruction = this.queueMemoryAccess(i);
+            fetchInstruction = this.queueMemoryAccess(i, SM_ID);
         } else {
             // i was cached, set age of i's cacheline to zero
             this.ages[j] = 0;
-            fetchInstruction = Instruction.cachedMemoryAccess();
+            fetchInstruction = this.queueCacheAccess(i, SM_ID);
         }
         return fetchInstruction;
     }
@@ -274,7 +346,10 @@ class L2Cache {
             let queuedInstruction = queuedInstructions[0];
             assert(typeof queuedInstruction.completeRatio !== "undefined", "undefined completeratio for instruction", {name: "queued instruction", obj: queuedInstruction});
             // Memory access instruction is pending, return the completion ratio
-            return {type: "pendingMemoryAccess", completeRatio: queuedInstruction.completeRatio};
+            return {
+                type: "pendingMemoryAccess",
+                completeRatio: queuedInstruction.completeRatio
+            };
         }
         // DRAM memory index is not in cache and we are not waiting for a memory access
         return {type: "notInCache", completeRatio: 0.0};
@@ -290,9 +365,12 @@ class L2Cache {
 // CUDA statements should be evaluated with Function.prototype.apply, using a CUDAKernelContext object as an argument.
 // As a side effect, this creates an Instruction object into the context object.
 class CUDAKernelContext {
-    constructor() {
+    constructor(SM_ID) {
+        // Local variables in CUDA kernel namespace
         this.locals = {};
+        // Function arguments to kernel
         this.args = {};
+        // Thread block indexing as in CUDA
         this.threadIdx = {
             x: null,
             y: null,
@@ -305,10 +383,12 @@ class CUDAKernelContext {
             x: null,
             y: null,
         };
+        // Store the most recently executed instruction which contains the simulated latency
         this.prevInstruction = null;
+        // ID of the SM that has scheduled a warp that executed this context
+        this.SM_ID = SM_ID;
+        assert(typeof this.SM_ID !== "undefined" && this.SM_ID > 0, "sm ids must be integers, defined in kernel contexts");
     }
-
-    // one line for easier automatic exclusion
     assertDefined(x, f) { assert(typeof x !== "undefined" && !Number.isNaN(x), "Failed to evaluate \"" + f + "\" statement due to undefined kernel context variable. Please check that every variable in every statement is defined."); }
 
     // Identity function with no latency
@@ -330,8 +410,9 @@ class CUDAKernelContext {
     arrayGet(memoryGetHandle, index) {
         this.assertDefined(memoryGetHandle, "arrayGet");
         this.assertDefined(index, "arrayGet");
+        this.assertDefined(this.SM_ID, "sm id");
         // Simulate memory get
-        this.prevInstruction = memoryGetHandle(index);
+        this.prevInstruction = memoryGetHandle(index, false, undefined, this.SM_ID);
         // Get the actual value without simulation
         return memoryGetHandle(index, true);
     }
@@ -367,8 +448,8 @@ class DeviceMemory extends Drawable {
         if (typeof extraPadding !== "undefined") {
             height += extraPadding.amount - slotPadding;
         }
-        super(x, y, width, height, canvas);
-        const slotFillRGBA = CONFIG.memory.slotFillRGBA;
+        super("device-memory", x, y, width, height, canvas);
+        const slotFillRGBA = CONFIG.memory.slotFillRGBA.slice();
         this.slots = Array.from(
             new Array(columns * rows),
             (_, i) => {
@@ -379,25 +460,119 @@ class DeviceMemory extends Drawable {
                 if (typeof extraPadding !== "undefined" && extraPadding.index < rowIndex) {
                     slotY += extraPadding.amount;
                 }
-                return new MemorySlot(i, 2, slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
+                // Drawable memory slot
+                const memorySlot = new MemorySlot(i, 2, "memory-slot", slotX, slotY, slotSize, slotSize, canvas, undefined, slotFillRGBA);
+                // Drawable overlays of different colors on top of the slot, one for each SM
+                const overlays = Array.from(
+                    CONFIG.animation.SMColorPalette,
+                    SM_color => {
+                        const coolDownPeriod = CONFIG.memory.coolDownPeriod;
+                        const coolDownStep = (1.0 - SM_color[3]) / (coolDownPeriod + 1);
+                        return {
+                            drawable: new Drawable("memory-slot-overlay-SM-color", slotX, slotY, slotSize, slotSize, canvas, undefined, SM_color),
+                            defaultColor: SM_color.slice(),
+                            hotness: 0,
+                            coolDownPeriod: coolDownPeriod,
+                            coolDownStep: coolDownStep,
+                        };
+                    }
+                );
+                // Counter indexed by SM ids, counting how many threads of that SM is currently waiting for a memory access to complete from this memory slot i.e. DRAM index
+                let threadAccessCounter = new Array(CONFIG.SM.count.max);
+                threadAccessCounter.fill(0);
+                return {
+                    memory: memorySlot,
+                    overlays: overlays,
+                    threadAccessCounter: threadAccessCounter,
+                };
             }
         );
     }
 
-    touch(i) {
-        this.slots[i].touch();
+    // Simulated memory access to DRAM index `memoryIndex` by an SM with id `SM_ID`
+    touch(SM_ID, memoryIndex) {
+        assert(typeof memoryIndex !== "undefined", "memoryIndex must be defined when touching memory slot");
+        assert(typeof SM_ID !== "undefined", "SM_ID must be defined when touching memory slot");
+        assert(CONFIG.SM.count.min <= SM_ID <= CONFIG.SM.count.max, "attempting to touch a DRAM index " + memoryIndex + " with multiprocessor ID " + SM_ID + " which is out of range of minimum and maximum amount of SMs");
+        const slot = this.slots[memoryIndex];
+        ++slot.threadAccessCounter[SM_ID - 1];
+        let overlay = slot.overlays[SM_ID - 1];
+        overlay.hotness = overlay.coolDownPeriod;
+        overlay.drawable.fillRGBA[3] = 0.8;
+    }
+
+    // When there is no longer a DRAM access instruction to `memoryIndex` by SM with id `SM_ID`, clear overlay from memory slot
+    untouch(SM_ID, memoryIndex) {
+        assert(typeof memoryIndex !== "undefined", "memoryIndex must be defined when untouching memory slot");
+        assert(typeof SM_ID !== "undefined", "SM_ID must be defined when untouching memory slot");
+        const queue = this.slots[memoryIndex].threadAccessCounter;
+        assert(typeof queue !== "undefined", "every memory slot must have a threadAccessCounter defined");
+        if (queue[SM_ID - 1] > 0) {
+            --queue[SM_ID - 1];
+        }
     }
 
     step(getCacheState) {
-        this.slots.forEach((slot, i) => {
-            slot.setCachedState(getCacheState(i));
-            slot.step();
-        });
+        for (let [i, slot] of this.slots.entries()) {
+            // Update state of this memory slot using the L2Cache state handle
+            slot.memory.setCachedState(getCacheState(i));
+            slot.memory.draw();
+        }
+        this.draw();
+    }
+
+    // Assuming SM_ID integers in range(1, CONFIG.SM.count.max + 1),
+    // Generator that yields [index, SM_ID], where index is the enumeration of the generator
+    *SMsCurrentlyAccessing(slot) {
+        let index = 0;
+        const counter = slot.threadAccessCounter;
+        for (let SM_ID = 1; SM_ID < counter.length + 1; ++SM_ID) {
+            if (counter[SM_ID - 1] > 0) {
+                yield [index++, SM_ID];
+            }
+        }
+    }
+
+    numSMsCurrentlyAccessing(slot) {
+        return Array.from(this.SMsCurrentlyAccessing(slot)).length;
+    }
+
+    draw() {
+        for (let [i, slot] of this.slots.entries()) {
+            // On top of the memory slot, draw unique color for each SM currently accessing this memory slot
+            // Also stack colors horizontally to avoid overlap
+            for (let [SM_index, SM_ID] of this.SMsCurrentlyAccessing(slot)) {
+                const overlay = slot.overlays[SM_ID - 1];
+                const drawable = overlay.drawable;
+                assert(typeof drawable !== "undefined", "If an SM touched a memory index, the SM must have some overlay color defined");
+                // Save original size
+                const originalX = drawable.x;
+                const originalWidth = drawable.width;
+                // Draw small slice of original so that all slices fit in the slot
+                const numSMs = this.numSMsCurrentlyAccessing(slot);
+                drawable.x += (numSMs - SM_index - 1) * originalWidth / numSMs;
+                drawable.width /= numSMs;
+                drawable.draw();
+                // Put back original size
+                drawable.x = originalX;
+                drawable.width = originalWidth;
+                // Reduce overlay hotness
+                if (overlay.hotness > 0) {
+                    --overlay.hotness;
+                    // Do not reduce below alpha of default color
+                    drawable.fillRGBA[3] = Math.max(overlay.defaultColor[3], drawable.fillRGBA[3] - overlay.coolDownStep);
+                }
+            }
+        }
         super.draw();
     }
 
     clear() {
-        this.slots.forEach(slot => slot.clear());
+        for (let slot of this.slots) {
+            slot.memory.clear();
+            slot.threadAccessCounter.fill(0);
+            slot.overlays.forEach(o => o.hotness = 0);
+        }
     }
 }
 
@@ -407,42 +582,44 @@ class MemorySlot extends Drawable {
         super(...drawableArgs);
         this.index = index;
         this.value = value;
-        // Copy default color
         this.defaultColor = this.fillRGBA.slice();
         this.cachedColor = CONFIG.cache.cachedStateRGBA.slice();
     }
 
-    // Simulate a memory access to this index
-    touch() {
-    }
-
     // Update slot cache status to highlight cached slots in rendering
     setCachedState(state) {
-        switch(state.type) {
-            case "cached":
-                this.fillRGBA = this.cachedColor.slice();
-                this.overlayRGBA = null;
-                this.overlayRatio = null;
-                break;
-            case "pendingMemoryAccess":
-                this.fillRGBA = this.defaultColor.slice();
-                this.overlayRGBA = this.cachedColor.slice();
-                this.overlayRatio = state.completeRatio;
-                break;
-            case "notInCache":
-                this.fillRGBA = this.defaultColor.slice();
-                this.overlayRGBA = null;
-                this.overlayRatio = null;
-                break;
-            default:
-                console.error("unknown cache state: ", state);
-                break;
+        assert(["cached", "pendingMemoryAccess", "notInCache"].some(t => t === state.type), "Unknown cache state", {name: "cache state", obj: state});
+        if (state.type === "pendingMemoryAccess") {
+            this.fillRGBA = this.defaultColor;
+            this.progressRGBA = this.cachedColor;
+            this.progressRatio = state.completeRatio;
+        } else {
+            this.progressRGBA = null;
+            this.progressRatio = null;
+        }
+
+        if (state.type === "cached") {
+            this.fillRGBA = this.cachedColor;
+        } else if (state.type === "notInCache") {
+            this.fillRGBA = this.defaultColor;
         }
     }
 
-    // Animation step
-    step() {
-        this.draw();
+    draw() {
+        // Draw memory slot rectangle
+        super.draw();
+        // Then, draw memory access progress on top of it
+        const x = this.x;
+        const y = this.y;
+        const width = this.width;
+        const height = this.height;
+        const ctx = this.canvasContext;
+        if (this.progressRGBA !== null) {
+            assert(typeof this.progressRatio  !== "undefined" && this.progressRatio !== null && this.progressRatio >= 0 - 1e-6 && this.progressRatio <= 1.0 + 1e-6, "if progressRGBA is given, the progressRatio must also be given and be in range [0, 1]", {name: "drawable.draw progress", obj: {color: this.progressRGBA, ratio: this.progressRatio}});
+            ctx.fillStyle = "rgba(" + this.progressRGBA.join(',') + ')';
+            const yOffset = (1.0 - this.progressRatio) * height;
+            ctx.fillRect(x, y + yOffset, width, height - yOffset);
+        }
     }
 
     clear() {
@@ -478,20 +655,17 @@ class Block {
         this.idx = blockIdx;
     }
 
-    // Generator of thread warps from this block, takes as argument a kernel call argument object
-    *asWarps(kernelArgs) {
+    // Generator of thread warps from this block, takes as argument a kernel call argument object and the id of an SM that has scheduled this block
+    *asWarps(kernelArgs, SM_ID) {
         const warpSize = CONFIG.SM.warpSize;
         const threadCount = this.dim.x * this.dim.y;
-        if (threadCount % warpSize !== 0) {
-            console.error("Uneven block size, unable to divide block evenly into warps");
-            return;
-        }
+        assert(threadCount % warpSize === 0, "Uneven block size, unable to divide block evenly into warps");
         let threadIndexes = [];
         for (let j = 0; j < this.dim.y; ++j) {
             for (let i = 0; i < this.dim.x; ++i) {
                 threadIndexes.push({x: i, y: j});
                 if (threadIndexes.length === warpSize) {
-                    const warp = new Warp(this, threadIndexes.slice(), kernelArgs);
+                    const warp = new Warp(this, threadIndexes.slice(), kernelArgs, SM_ID);
                     threadIndexes = [];
                     yield warp;
                 }
@@ -508,6 +682,7 @@ class Thread {
         this.statement = null;
         this.kernelContext = null;
         this.instruction = Instruction.empty();
+        this.prevInstruction = null;
     }
 
     // True if this thread is ready to take a new instruction
@@ -516,11 +691,14 @@ class Thread {
     }
 
     cycle() {
+        assert(typeof this.instruction !== "undefined" && this.instruction !== null, "threads should never have undefined instructions");
         if (this.isMasked) {
             return;
         }
         if (this.statement !== null) {
-            // Create new instruction from queued statement
+            assert(this.instruction.isDone(), "thread was assigned a new statement but it still had an instruction with cycles left", {name: "thread", obj: this});
+            // This thread has been assigned to execute a new statement, create instruction from queued statement
+            // We use a try-catch because the statements can be arbitrary js-functions that can throw just about anything
             try {
                 this.statement.apply(this.kernelContext);
             } catch(error) {
@@ -528,25 +706,26 @@ class Thread {
                 console.error(error);
                 failHard();
             }
+            this.prevInstruction = this.instruction;
             this.instruction = this.kernelContext.prevInstruction;
             this.statement = null;
         } else {
             // Continue waiting for instruction to complete
-            // Do not advance the cycle counters for memory access instructions since they are controlled by the L2Cache
-            if (!this.instruction.name.endsWith("memoryAccess")) {
+            // Do not advance cycle counters for DRAM access instructions since they are controlled by the L2Cache
+            if (this.instruction.name !== "deviceMemoryAccess") {
                 this.instruction.cycle();
             }
         }
     }
 }
 
-// Simulated group of CUDA threads running in an SM
+// Simulated group of CUDA threads running in an SM specified by id SM_ID
 class Warp {
-    constructor(block, threadIndexes, kernelArgs) {
+    constructor(block, threadIndexes, kernelArgs, SM_ID) {
         this.terminated = false;
         this.running = false;
         this.threads = Array.from(threadIndexes, idx => new Thread(idx));
-        this.initCUDAKernelContext(block, kernelArgs);
+        this.initCUDAKernelContext(block, kernelArgs, SM_ID);
         // Assuming pre-Volta architecture, with program counters for each warp but not yet for each thread
         this.programCounter = 0;
     }
@@ -557,19 +736,21 @@ class Warp {
     }
 
     // Set threadIdx, blockIdx etc. namespace for simulated CUDA kernel
-    initCUDAKernelContext(block, kernelArgs) {
+    initCUDAKernelContext(block, kernelArgs, SM_ID) {
+        assert(typeof SM_ID !== "undefined" && 1 <= SM_ID, "cuda kernel contexts must know the SM id which is executing the context, but it was " + SM_ID);
         // Populate simulated CUDA kernel namespace for each thread
         const warpContext = {
             blockIdx: block.idx,
             blockDim: block.dim,
             args: Object.assign({}, kernelArgs),
         };
-        this.threads.forEach(t => {
+        for (let t of this.threads) {
             const threadContext = {
                 threadIdx: t.idx,
             };
-            t.kernelContext = Object.assign(new CUDAKernelContext(), warpContext, threadContext);
-        });
+            // Create empty context, overwrite by warp context, then overwrite by thread context, producing the final kernel context for a thread
+            t.kernelContext = Object.assign(new CUDAKernelContext(SM_ID), warpContext, threadContext);
+        }
     }
 
     // Add a new statement/instruction to be executed by all threads in the warp
@@ -593,6 +774,7 @@ class Warp {
             }
         }
         if (instr.cyclesLeft < 0) {
+            // negative cycles is a hack for zero-latency instructions, which can be executed an arbitrary amount times within one SM cycle
             assert(this.threads.every(t => t.instruction.cyclesLeft < 0), "either all or no threads in a warp have a zero-latency instruction");
             // Manually override instruction latency,
             // this is to signal the warp simulation it can execute another instruction within the current cycle
@@ -613,6 +795,11 @@ class Instruction {
     constructor(name, latency, data) {
         this.name = name;
         this.data = data || {};
+        this.cyclesLeft = null;
+        // completeRatio is 0 if cyclesLeft = latency, and 1 if cyclesLeft = 0
+        this.completeRatio = null;
+        // 1 / latency
+        this.completeRatioStep = null;
         this.setLatency(latency);
     }
 
@@ -623,7 +810,11 @@ class Instruction {
     cycle() {
         if (this.cyclesLeft > 0) {
             --this.cyclesLeft;
-            this.completeRatio += this.completeRatioStep;
+            if (this.cyclesLeft === 0) {
+                this.completeRatio = 1.0;
+            } else {
+                this.completeRatio += this.completeRatioStep;
+            }
         }
     }
 
@@ -631,9 +822,13 @@ class Instruction {
         this.cyclesLeft = latency || 0;
         assert(this.cyclesLeft >= -1, "invalid latency value", {name: "Instruction", obj: this});
         this.maxCycles = this.cyclesLeft;
-        // cyclesLeft in range [0, 1]
-        this.completeRatio = 0.0;
-        this.completeRatioStep = (this.maxCycles > 0) ? 1.0 / this.maxCycles : 0.0;
+        if (this.maxCycles > 0) {
+            this.completeRatio = 0.0;
+            this.completeRatioStep = 1.0 / this.maxCycles;
+        } else {
+            this.completeRatio = 1.0;
+            this.completeRatioStep = 0.0;
+        }
     }
 
     // Dummy instruction with zero latency
@@ -654,22 +849,22 @@ class Instruction {
         return new Instruction("arithmetic", CONFIG.latencies[instructionLatencies].arithmetic);
     }
 
-    static cachedMemoryAccess() {
-        return new Instruction("cachedMemoryAccess", CONFIG.latencies[instructionLatencies].L2CacheAccess);
+    static cachedMemoryAccess(i, SM_ID) {
+        return new Instruction("cachedMemoryAccess", CONFIG.latencies[instructionLatencies].L2CacheAccess, {index: i, SM_ID: SM_ID});
     }
 
-    static deviceMemoryAccess(i) {
-        return new Instruction("deviceMemoryAccess", CONFIG.latencies[instructionLatencies].memoryAccess, {index: i});
+    static deviceMemoryAccess(i, SM_ID) {
+        return new Instruction("deviceMemoryAccess", CONFIG.latencies[instructionLatencies].memoryAccess, {index: i, SM_ID: SM_ID});
     }
 }
 
 class SMstats {
-    constructor(processorID) {
-        this.stateElement = document.getElementById("sm-state-" + processorID);
+    constructor(SM_ID) {
+        this.stateElement = document.getElementById("sm-state-" + SM_ID);
         this.cycleCounter = this.stateElement.querySelector("ul li pre span.sm-cycle-counter");
         this.blockIdxSpan = this.stateElement.querySelector("ul li pre span.sm-current-block-idx");
         this.cycles = 0;
-        this.setColor(CONFIG.animation.kernelHighlightPalette[processorID - 1]);
+        this.setColor(CONFIG.animation.SMColorPalette[SM_ID - 1]);
     }
 
     cycle() {
@@ -692,14 +887,15 @@ class SMstats {
 }
 
 class SMController {
-    constructor(id) {
+    constructor(SM_ID) {
         this.schedulerCount = CONFIG.SM.warpSchedulers;
         this.residentWarps = [];
         this.grid = null;
         this.program = null;
         this.activeBlock = null;
         this.kernelArgs = null;
-        this.statsWidget = new SMstats(id);
+        this.statsWidget = new SMstats(SM_ID);
+        this.SM_ID = SM_ID;
     }
 
     // Free all resident warps and take next available block from the grid
@@ -712,7 +908,7 @@ class SMController {
         const newBlock = this.grid.blocks[i];
         this.activeBlock = newBlock;
         this.activeBlock.locked = true;
-        this.residentWarps = Array.from(this.activeBlock.asWarps(this.kernelArgs));
+        this.residentWarps = Array.from(this.activeBlock.asWarps(this.kernelArgs, this.SM_ID));
         this.statsWidget.setActiveBlock(this.activeBlock);
         return true;
     }
@@ -852,8 +1048,8 @@ class SMController {
 }
 
 class StreamingMultiprocessor {
-    constructor(id) {
-        this.controller = new SMController(id);
+    constructor(SM_ID) {
+        this.controller = new SMController(SM_ID);
     }
 
     // Simulate one processor cycle
@@ -870,6 +1066,10 @@ class StreamingMultiprocessor {
             return;
         }
         this.cycle();
+    }
+
+    get_ID() {
+        return this.controller.SM_ID;
     }
 }
 
@@ -907,41 +1107,43 @@ class Device {
         return Array.from(new Array(count), (_, i) => new StreamingMultiprocessor(i + 1));
     }
 
-    memoryTransaction(type, i, noSimulation, newValue) {
-        if (type !== "get" && type !== "set") {
-            console.error("Invalid memory access type:", type);
-        }
+    memoryTransaction(type, i, noSimulation, newValue, SM_ID) {
+        assert(type === "get" || type === "set", "Invalid memory access type: " + type);
         if (typeof noSimulation !== "undefined" && noSimulation) {
             // Access actual JavaScript array value
             if (type === "get") {
-                return this.memory.slots[i].value;
+                return this.memory.slots[i].memory.value;
             } else if (type === "set") {
-                this.memory.slots[i].value = newValue;
+                this.memory.slots[i].memory.value = newValue;
             }
         } else {
             // Simulate memory access through L2Cache and return an Instruction with latency
             if (type === "get" || type === "set") {
-                // Touch memory slot to trigger visualization
-                this.memory.touch(i);
+                // Touch memory slot i with an SM to trigger visualization
+                this.memory.touch(SM_ID, i);
                 // Return instruction with latency
-                return this.L2Cache.fetch(i);
+                return this.L2Cache.fetch(SM_ID, i);
             }
         }
     }
 
     step() {
-        this.multiprocessors.forEach((sm, smIndex) => {
+        for (let sm of this.multiprocessors) {
             sm.step();
             // Update line highlights for each warp that has started executing
             for (let warp of sm.controller.nonTerminatedWarps()) {
                 const lineno = warp.programCounter;
                 if (this.kernelHighlightingOn && lineno > 0) {
-                    this.kernelSource.setHighlight(smIndex, lineno);
+                    this.kernelSource.setHighlight(sm.get_ID() - 1, lineno);
                 }
             }
-        });
+        }
         this.kernelSource.step();
-        this.L2Cache.step();
+        const completedMemoryInstructions = this.L2Cache.step();
+        for (let instruction of completedMemoryInstructions) {
+            // Clear SM overlay from each memory slot
+            this.memory.untouch(instruction.data.SM_ID, instruction.data.index);
+        }
         const L2CacheStateHandle = this.L2Cache.getCacheState.bind(this.L2Cache);
         this.memory.step(L2CacheStateHandle);
     }
@@ -957,7 +1159,7 @@ class Device {
 // according to arrival time
 class KernelSource {
     constructor(sourceLines, lineHeight) {
-        const palette = CONFIG.animation.kernelHighlightPalette;
+        const palette = CONFIG.animation.SMColorPalette;
         this.highlightedLines = Array.from(sourceLines, (line, lineno) => {
             const x = 0;
             const y = lineno * lineHeight;
@@ -969,7 +1171,7 @@ class KernelSource {
                     let hlColor = color.slice();
                     hlColor[3] *= 0.5;
                     return {
-                        drawable: new Drawable(x, y, width, lineHeight, kernelCanvas, undefined, hlColor),
+                        drawable: new Drawable("kernel-source-line-highlighting", x, y, width, lineHeight, kernelCanvas, undefined, hlColor),
                     };
                 }),
             };
@@ -992,13 +1194,13 @@ class KernelSource {
             line.queue.forEach((colorIndex, queueIndex) => {
                 // Offset all colors and render first colors in queue at the bottom
                 const drawable = line.colors[colorIndex].drawable;
-                const prevY = drawable.y;
-                const prevHeight = drawable.height;
-                drawable.y += (stackedColorCount - queueIndex - 1) * prevHeight/stackedColorCount
+                const originalY = drawable.y;
+                const originalHeight = drawable.height;
+                drawable.y += (stackedColorCount - queueIndex - 1) * originalHeight/stackedColorCount
                 drawable.height /= stackedColorCount;
                 drawable.draw();
-                drawable.y = prevY;
-                drawable.height = prevHeight;
+                drawable.y = originalY;
+                drawable.height = originalHeight;
             });
             line.queue = [];
         });
