@@ -283,7 +283,7 @@ const CUDAKernels = {
                 rows: 32,
                 columns: 64,
             },
-            // Increase padding between rows 15 and 16 to 4, in order to distinguish data in t and d
+            // Increase padding between rows 15 and 16 to 4, in order to distinguish data in d and t
             extraRowPadding: {
                 index: 15,
                 amount: 4,
@@ -301,7 +301,7 @@ const CUDAKernels = {
         },
         sourceLines: ppcStepV2Lines,
         statements: ppcStepV2Statements,
-        memoryMessages: ["Showing only top 16 rows of d and r."],
+        memoryMessages: ["Showing only top 16 rows of d and t."],
         sourceMessages: ['Source: <a href="http://ppc.cs.aalto.fi/ch4/v2/">Reuse in data registers</a>'],
     },
 
@@ -313,5 +313,5 @@ for (let kernel in CUDAKernels) {
         CUDAKernels[kernel].sourceMessages = [];
     }
     // Show SASS omission disclaimer above kernel source lines
-    CUDAKernels[kernel].sourceMessages.push("For simplicity, assume each kernel line maps one-to-one into compiled SASS assembly.");
+    CUDAKernels[kernel].sourceMessages.push("For simplicity, assume each kernel line maps one-to-one into compiled SASS assembly. Also assume all threads in a single warp execute their instructions simultaneously.");
 }

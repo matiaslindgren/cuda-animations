@@ -24,6 +24,19 @@ function printobj(o) {
     console.log(JSON.stringify(o, null, 2));
 }
 
+function dumpCachelines(o) {
+    for (let [index, line] of o.entries()) {
+        console.log("index", index, "width", line.lineSize);
+        console.log("  " + Array.from(line.indexes).join(' '));
+    }
+}
+
+function disjoint(set1, set2) {
+    for (let x of set1.values())
+        if (set2.has(x))
+            return false;
+    return true;
+}
 
 function get4Palette(key) {
     switch(key) {
@@ -44,8 +57,8 @@ function get4Palette(key) {
 
 const CONFIG = {
     animation: {
-        // Array of colors for highlighting kernel source lines and SMs
-        kernelHighlightPalette: get4Palette("rgba-colorful"),
+        // Array of distinct colors to distinguish independent streaming multiprocessors
+        SMColorPalette: get4Palette("rgba-colorful"),
     },
     // Simulated latency in cycles for different instruction types
     // Mei and Chu [1] report that global memory access latencies on a GTX980 can be measured in tens if there is an L1 TLB hit, while on an L1 TLB miss, the latencies go up to hundreds or thousands of cycles.
@@ -57,22 +70,28 @@ const CONFIG = {
             memoryAccess: 0,
         },
         veryLow: {
-            name: "(memory access only) Very low",
+            name: "(DRAM access only) Very low",
             arithmetic: 0,
             L2CacheAccess: 0,
             memoryAccess: 5,
         },
         medium: {
-            name: "(memory access only) Medium",
+            name: "Medium",
             arithmetic: 0,
-            L2CacheAccess: 0,
-            memoryAccess: 25,
+            L2CacheAccess: 2,
+            memoryAccess: 20,
         },
         high: {
             name: "High",
             arithmetic: 1,
-            L2CacheAccess: 20,
-            memoryAccess: 70,
+            L2CacheAccess: 5,
+            memoryAccess: 50,
+        },
+        realistic: {
+            name: "Realistic",
+            arithmetic: 10,
+            L2CacheAccess: 50,
+            memoryAccess: 500,
         },
     },
     memory: {
@@ -85,7 +104,7 @@ const CONFIG = {
         },
         slotFillRGBA: [160, 160, 160, 0.2],
         // Amount of animation steps of the cooldown transition after touching a memory index
-        coolDownPeriod: 10,
+        coolDownPeriod: 15,
     },
     cache: {
         // Size of a L2 cacheline in slots
