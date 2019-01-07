@@ -25,7 +25,7 @@ SOURCE_FILES = tuple((os.path.join("src", path), pat) for path, pat in SOURCE_FI
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build_dir", "-b",
+    parser.add_argument("--build-dir", "-b",
         type=str,
         default=os.path.join(os.path.curdir, "build"),
         help="Path to build output directory")

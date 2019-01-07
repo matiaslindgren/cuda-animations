@@ -9,9 +9,11 @@ As a consequence, many relevant hardware-level details have been omitted in the 
 
 ```
 git clone --depth 1 https://github.com/matiaslindgren/cuda-animations
+python3 build.py --build-dir build
+cd build
 python3 -m http.server
 ```
-Open the URL localhost:8000 in a browser.
+Open a browser and go to localhost:8000.
 
 ## GPU global memory access
 
