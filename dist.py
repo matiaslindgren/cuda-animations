@@ -1,15 +1,19 @@
 """
-Move source files to a build dir, while removing all lines containing some strings such as "assert".
+Move source files to a build dir, while removing comments and all lines containing some strings such as "assert".
 """
 import argparse
 import os
+import re
+
+assert_pattern = re.compile("assert")
+comment_pattern = re.compile("^\s*?" + re.escape(r"//"))
 
 SOURCE_FILES = (
-    ("src/main.js", "assert"),
-    ("src/lib.js", "assert"),
-    ("src/config.js", ''),
-    ("src/kernels.js", 'assert'),
-    ("src/main.css", ''),
+    ("src/main.js",     (assert_pattern, comment_pattern)),
+    ("src/lib.js",      (assert_pattern, comment_pattern)),
+    ("src/config.js",   (comment_pattern, )),
+    ("src/kernels.js",  (assert_pattern, comment_pattern)),
+    ("src/main.css",    ()),
 )
 
 if __name__ == "__main__":
@@ -21,12 +25,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not os.path.exists(args.build_dir):
         os.mkdir(args.build_dir)
-    for src, drop_string in SOURCE_FILES:
+    for src, drop_patterns in SOURCE_FILES:
         with open(src) as f:
             lines = f.readlines()
         dst = os.path.join(args.build_dir, os.path.basename(src))
         with open(dst, "w") as f:
             for line in lines:
-                if drop_string and drop_string in line:
+                if any(re.search(p, line) for p in drop_patterns):
                     continue
                 f.write(line)
