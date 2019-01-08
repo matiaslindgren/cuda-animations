@@ -528,13 +528,12 @@ class DeviceMemory extends Drawable {
     }
 
     // Assuming SM_ID integers in range(1, CONFIG.SM.count.max + 1),
-    // Generator that yields [index, SM_ID], where index is the enumeration of the generator
+    // Generator that yields the SM_IDs of corresponding indexes of all non-zero thread access counters
     *SMsCurrentlyAccessing(slot) {
-        let index = 0;
         const counter = slot.threadAccessCounter;
         for (let SM_ID = 1; SM_ID < counter.length + 1; ++SM_ID) {
             if (counter[SM_ID - 1] > 0) {
-                yield [index++, SM_ID];
+                yield SM_ID;
             }
         }
     }
@@ -546,42 +545,43 @@ class DeviceMemory extends Drawable {
     draw() {
         for (let [i, slot] of this.slots.entries()) {
             // On top of the memory slot, draw unique color for each SM currently accessing this memory slot
-            // Also stack colors horizontally to avoid overlap
-            for (let [SM_index, SM_ID] of this.SMsCurrentlyAccessing(slot)) {
-                const overlay = slot.overlays[SM_ID - 1];
+            let SM_count = 0;
+            const numSMs = this.numSMsCurrentlyAccessing(slot);
+            for (let SM_ID = 1; SM_ID < slot.overlays.length + 1; ++SM_ID) {
+                let overlay = slot.overlays[SM_ID - 1];
                 const drawable = overlay.drawable;
-                assert(typeof drawable !== "undefined", "If an SM touched a memory index, the SM must have some overlay color defined");
-                // Save original size
-                const originalX = drawable.x;
-                const originalWidth = drawable.width;
-                // Draw small slice of original so that all slices fit in the slot
-                const numSMs = this.numSMsCurrentlyAccessing(slot);
-                drawable.x += (numSMs - SM_index - 1) * originalWidth / numSMs;
-                drawable.width /= numSMs;
-                drawable.draw();
-                // Put back original size
-                drawable.x = originalX;
-                drawable.width = originalWidth;
-            }
-            // Reduce hotness of all overlays
-            for (let o = 0; o < slot.overlays.length; ++o) {
-                let overlay = slot.overlays[o];
-                if (slot.threadAccessCounter[o] > 0) {
-                    // SM with id i + 1 is still accessing this slot, do not reduce hotness too much
+                assert(typeof drawable !== "undefined", "All memory slots must have drawables for every SM overlay color");
+                if (slot.threadAccessCounter[SM_ID - 1] > 0) {
+                    // Some thread of a warp scheduled in this SM is still accessing memory slot i
+                    // Draw small slice of original so that all slices fit in the slot
+                    SM_count++;
+                    const originalX = drawable.x;
+                    const originalWidth = drawable.width;
+                    drawable.x += (numSMs - SM_count) * originalWidth / numSMs;
+                    drawable.width /= numSMs;
+                    drawable.draw();
+                    // Put back original size
+                    drawable.x = originalX;
+                    drawable.width = originalWidth;
+                    // Do not reduce hotness too much
                     if (overlay.hotness > overlay.coolDownPeriod/2) {
                         // Hotness still half way
                         --overlay.hotness;
                         overlay.drawable.fillRGBA[3] -= overlay.coolDownStep;
                     }
                 } else {
-                    // The SM is not anymore accessing the slot, let the hotness reduce to zero
+                    // No threads are accessing this slot
+                    drawable.draw();
                     if (overlay.hotness > 0) {
                         // Overlay still has alpha to display SM color
                         --overlay.hotness;
-                        overlay.drawable.fillRGBA[3] -= overlay.coolDownStep;
+                    }
+                    if (overlay.hotness === 0) {
+                        // Set alpha to zero to remove SM color
+                        overlay.drawable.fillRGBA[3] = 0;
                     } else {
-                    // Set alpha to zero to remove SM color
-                    overlay.drawable.fillRGBA[3] = 0;
+                        // Reduce slightly
+                        overlay.drawable.fillRGBA[3] -= overlay.coolDownStep;
                     }
                 }
             }
