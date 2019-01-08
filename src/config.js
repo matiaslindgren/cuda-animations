@@ -39,19 +39,31 @@ function disjoint(set1, set2) {
 }
 
 function get4Palette(key) {
+    let alpha = 0.2;
+    let palette = [];
     switch(key) {
         case "rgba-colorful":
-            const alpha = 0.2;
-            return [
+            palette = [
                 [35, 196, 1, alpha],
                 [227, 1, 23, alpha],
                 [235, 190, 2, alpha],
                 [47, 21, 182, alpha],
             ];
+            break;
+        case "rgba-grayscale":
+            alpha = 0.5;
+            palette = [
+                [100, 100, 100, alpha],
+                [200, 200, 200, alpha],
+                [0, 0, 0, alpha],
+                [50, 50, 50, alpha],
+            ];
+            break;
         default:
             failHard();
             console.error("unknown palette key: " + key);
     }
+    return palette;
 }
 
 
@@ -59,6 +71,7 @@ const CONFIG = {
     animation: {
         // Array of distinct colors to distinguish independent streaming multiprocessors
         SMColorPalette: get4Palette("rgba-colorful"),
+        // SMColorPalette: get4Palette("rgba-grayscale"),
     },
     // Simulated latency in cycles for different instruction types
     // Mei and Chu [1] report that global memory access latencies on a GTX980 can be measured in tens if there is an L1 TLB hit, while on an L1 TLB miss, the latencies go up to hundreds or thousands of cycles.
@@ -73,18 +86,18 @@ const CONFIG = {
             name: "(DRAM access only) Very low",
             arithmetic: 0,
             L2CacheAccess: 0,
-            memoryAccess: 5,
+            memoryAccess: 2,
         },
         medium: {
             name: "Medium",
-            arithmetic: 0,
-            L2CacheAccess: 2,
-            memoryAccess: 20,
+            arithmetic: 1,
+            L2CacheAccess: 5,
+            memoryAccess: 10,
         },
         high: {
             name: "High",
-            arithmetic: 1,
-            L2CacheAccess: 5,
+            arithmetic: 5,
+            L2CacheAccess: 25,
             memoryAccess: 50,
         },
         realistic: {
