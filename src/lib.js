@@ -144,6 +144,7 @@ class L2Cache {
     }
 
     coalesceAndMergeCacheLines() {
+        assert(Array.from(this.memoryAccessQueue.keys()).every(key => this.memoryAccessQueue.get(key).every(instruction => instruction.data.index === key)), "cannot L2Cache.coalesceAndMergeCacheLines because memoryAccessQueue contains instructions with indexes not matching the queue keys", {name: "L2Cache memoryAccessQueue", obj: this.memoryAccessQueue});
         // Coalesce all new memory accesses of distinct indexes to cache lines with a width of 32, 64 or 128 bytes.
         // Get a list of memory access instructions for every unique memory index.
         const instructions = Array.from(this.memoryAccessQueue.values(), instructions => instructions[0])
@@ -181,6 +182,7 @@ class L2Cache {
                 }
             }
         }
+        assert(Array.from(this.memoryAccessQueue.values()).every(instructions => instructions.every(instruction => !instruction.isDone())), "the memory access queue cannot have completed instructions after coalescing transactions");
     }
 
     // Add fetched data from every completed memory access as 32 byte cache lines
@@ -231,6 +233,7 @@ class L2Cache {
                 this.cacheAccessQueue.delete(instruction.data.index);
             }
         }
+        assert(Array.from(this.allQueuedInstructions()).every(instructions => instructions.every(instr => !instr.isDone())), "memory access queues cannot contain finished memory access instructions after removing all completed instructions");
 
         this.coalesceAndMergeCacheLines()
 
@@ -248,7 +251,7 @@ class L2Cache {
         }
 
         // Filter away all memory access indexes that simulate coalescing memory transactions
-        // i.e. return all completed cached and device memory instructions that were requested by some thread
+        // i.e. return only completed cached and device memory instructions that were requested by some thread
         return completedInstructions.filter(instruction => {
             const SM_ID = instruction.data.SM_ID;
             if (typeof SM_ID !== "undefined") assert(SM_ID > 0, "SM_IDs should all start at 1", {name: "during filtering of L2 completed memory instructions, Instruction", obj: instruction});
@@ -292,7 +295,8 @@ class L2Cache {
     queueMemoryAccess(i, SM_ID) {
         // Every memory access will be recorded, even if a cache line retrieval is already pending to that index
         let newInstruction = Instruction.deviceMemoryAccess(i, SM_ID);
-        if (!this.memoryAccessQueue.has(i)) {
+        if (!this.memoryAccessQueue.has(i) ||
+            this.memoryAccessQueue.get(i).every(instruction => instruction.isDone())) {
             // We are not currently waiting for a memory access to index i
             this.memoryAccessQueue.set(i, new Array);
         } else {
@@ -307,7 +311,8 @@ class L2Cache {
 
     queueCacheAccess(i, SM_ID) {
         let newInstruction = Instruction.cachedMemoryAccess(i, SM_ID);
-        if (!this.cacheAccessQueue.has(i)) {
+        if (!this.cacheAccessQueue.has(i) ||
+            this.cacheAccessQueue.get(i).every(instruction => instruction.isDone())) {
             this.cacheAccessQueue.set(i, new Array);
         } else {
             const oldestInstruction = this.cacheAccessQueue.get(i)[0];
@@ -330,6 +335,7 @@ class L2Cache {
             this.ages[j] = 0;
             fetchInstruction = this.queueCacheAccess(i, SM_ID);
         }
+        //if (instructionLatencies && instructionLatencies !== "none") assert(fetchInstruction.cyclesLeft > 0, "When using non-zero latencies, every queued memory instruction must have a latency of at least 1. Latency was: '" + instructionLatencies + "'.", {name: "L2Cache.fetch, bad Instruction", obj: fetchInstruction});
         return fetchInstruction;
     }
 
@@ -498,7 +504,7 @@ class DeviceMemory extends Drawable {
         ++slot.threadAccessCounter[SM_ID - 1];
         let overlay = slot.overlays[SM_ID - 1];
         overlay.hotness = overlay.coolDownPeriod;
-        overlay.drawable.fillRGBA[3] = 0.8;
+        overlay.drawable.fillRGBA[3] = 0.6;
     }
 
     // When there is no longer a DRAM access instruction to `memoryIndex` by SM with id `SM_ID`, clear overlay from memory slot
@@ -556,11 +562,27 @@ class DeviceMemory extends Drawable {
                 // Put back original size
                 drawable.x = originalX;
                 drawable.width = originalWidth;
-                // Reduce overlay hotness
-                if (overlay.hotness > 0) {
-                    --overlay.hotness;
-                    // Do not reduce below alpha of default color
-                    drawable.fillRGBA[3] = Math.max(overlay.defaultColor[3], drawable.fillRGBA[3] - overlay.coolDownStep);
+            }
+            // Reduce hotness of all overlays
+            for (let o = 0; o < slot.overlays.length; ++o) {
+                let overlay = slot.overlays[o];
+                if (slot.threadAccessCounter[o] > 0) {
+                    // SM with id i + 1 is still accessing this slot, do not reduce hotness too much
+                    if (overlay.hotness > overlay.coolDownPeriod/2) {
+                        // Hotness still half way
+                        --overlay.hotness;
+                        overlay.drawable.fillRGBA[3] -= overlay.coolDownStep;
+                    }
+                } else {
+                    // The SM is not anymore accessing the slot, let the hotness reduce to zero
+                    if (overlay.hotness > 0) {
+                        // Overlay still has alpha to display SM color
+                        --overlay.hotness;
+                        overlay.drawable.fillRGBA[3] -= overlay.coolDownStep;
+                    } else {
+                    // Set alpha to zero to remove SM color
+                    overlay.drawable.fillRGBA[3] = 0;
+                    }
                 }
             }
         }
@@ -660,13 +682,13 @@ class Block {
         const warpSize = CONFIG.SM.warpSize;
         const threadCount = this.dim.x * this.dim.y;
         assert(threadCount % warpSize === 0, "Uneven block size, unable to divide block evenly into warps");
-        let threadIndexes = [];
+        let threadIndexes = new Array;
         for (let j = 0; j < this.dim.y; ++j) {
             for (let i = 0; i < this.dim.x; ++i) {
                 threadIndexes.push({x: i, y: j});
                 if (threadIndexes.length === warpSize) {
                     const warp = new Warp(this, threadIndexes.slice(), kernelArgs, SM_ID);
-                    threadIndexes = [];
+                    threadIndexes = new Array;
                     yield warp;
                 }
             }
@@ -682,7 +704,7 @@ class Thread {
         this.statement = null;
         this.kernelContext = null;
         this.instruction = Instruction.empty();
-        this.prevInstruction = null;
+        this.prevInstruction = Instruction.empty();
     }
 
     // True if this thread is ready to take a new instruction
@@ -710,6 +732,8 @@ class Thread {
             this.instruction = this.kernelContext.prevInstruction;
             this.statement = null;
         } else {
+            // Thread.prevInstruction is available only for precisely one cycle, after a new statement was scheduled
+            this.prevInstruction = null;
             // Continue waiting for instruction to complete
             // Do not advance cycle counters for DRAM access instructions since they are controlled by the L2Cache
             if (this.instruction.name !== "deviceMemoryAccess") {
@@ -759,18 +783,24 @@ class Warp {
         ++this.programCounter;
     }
 
+    *changedThreadInstructions() {
+        for (let thread of this.threads) {
+            if (thread.prevInstruction !== null) {
+                yield [thread.prevInstruction, thread.instruction];
+            }
+        }
+    }
+
     // All threads in a warp do one cycle in parallel
     cycle() {
         this.threads.forEach(t => t.cycle());
+        // Assume all threads proceed in unison and do warp wide hacks
         const instr = this.threads[0].instruction;
         if (instr !== null && !instr.isDone()) {
-            // Warp wide hacks
-            switch (instr.name) {
-                // Inelegant jump instruction hack, assuming all threads have the same jump instruction at the same cycle
-                case "jump":
-                    assert(this.threads.every(t => t.instruction.name === "jump"), "only warp wide jump instructions supported");
-                    this.programCounter += instr.data.jumpOffset + Math.sign(instr.data.jumpOffset);
-                    break;
+            // Execute jump by manually changing the program counter
+            if (instr.name === "jump") {
+                assert(this.threads.every(t => t.instruction.name === "jump"), "only warp wide jumps supported");
+                this.programCounter += instr.data.jumpOffset + Math.sign(instr.data.jumpOffset);
             }
         }
         if (instr.cyclesLeft < 0) {
@@ -889,13 +919,17 @@ class SMstats {
 class SMController {
     constructor(SM_ID) {
         this.schedulerCount = CONFIG.SM.warpSchedulers;
-        this.residentWarps = [];
+        this.residentWarps = new Array;
         this.grid = null;
         this.program = null;
         this.activeBlock = null;
         this.kernelArgs = null;
         this.statsWidget = new SMstats(SM_ID);
         this.SM_ID = SM_ID;
+        // Populated with completed instructions one cycle after a warp finishes executing instructions
+        this.completedInstructions = new Array;
+        // Same as above but with instructions that were scheduled on the previous cycle
+        this.scheduledInstructions = new Array;
     }
 
     // Free all resident warps and take next available block from the grid
@@ -1005,6 +1039,7 @@ class SMController {
         }
     }
 
+    // For every available warp, take new statement and advance program counter
     updateProgramCounters() {
         for (let warp of this.scheduledWarps()) {
             if (!warp.isActive()) {
@@ -1027,11 +1062,16 @@ class SMController {
         this.scheduleWarps();
         let isDone = true;
         if (this.hasNonTerminatedWarps()) {
-            // Execute warps
+            // Schedule new statements for all waiting warps and advance their program counters
             this.updateProgramCounters();
             for (let warp of this.nonTerminatedWarps()) {
                 if (!warp.cycle() && isDone) {
                     isDone = false;
+                }
+                // Collect completed and new instructions, i.e. every "instruction transition" for all Thread instances
+                for (let [completed, scheduled] of warp.changedThreadInstructions()) {
+                    this.completedInstructions.push(completed);
+                    this.scheduledInstructions.push(scheduled);
                 }
             }
         } else {
@@ -1057,6 +1097,28 @@ class StreamingMultiprocessor {
         if (this.controller.program !== null) {
             this.controller.cycle();
         }
+    }
+
+    // Iterate over all memory access instructions that completed during the previous cycle of the SM controller
+    *completedMemoryInstructions() {
+        for (let instruction of this.controller.completedInstructions) {
+            assert(typeof instruction !== "undefined", "completed instructions must not be undefined", {name: "StreamingMultiprocessor.completedMemoryInstructions iterated over this.controller.completedInstructions and instruction", obj: instruction});
+            if (instruction.name.endsWith("MemoryAccess")) {
+                yield instruction;
+            }
+        }
+        this.controller.completedInstructions = new Array;
+    }
+
+    // Iterate over all memory access instructions that were scheduled during the previous cycle of the SM controller
+    *scheduledMemoryInstructions() {
+        for (let instruction of this.controller.scheduledInstructions) {
+            assert(typeof instruction !== "undefined", "scheduled instructions must not be undefined", {name: "StreamingMultiprocessor.scheduledMemoryInstructions iterated over this.controller.scheduledInstructions and instruction", obj: instruction});
+            if (instruction.name.endsWith("MemoryAccess")) {
+                yield instruction;
+            }
+        }
+        this.controller.scheduledInstructions = new Array;
     }
 
     // Animation loop step
@@ -1119,8 +1181,6 @@ class Device {
         } else {
             // Simulate memory access through L2Cache and return an Instruction with latency
             if (type === "get" || type === "set") {
-                // Touch memory slot i with an SM to trigger visualization
-                this.memory.touch(SM_ID, i);
                 // Return instruction with latency
                 return this.L2Cache.fetch(SM_ID, i);
             }
@@ -1128,8 +1188,18 @@ class Device {
     }
 
     step() {
+        // In order to update device memory highlighting state,
+        // we need to store memory access instructions that changed state during this time step in every SM
+        let completedMemoryInstructions = new Array;
+        let scheduledMemoryInstructions = new Array;
         for (let sm of this.multiprocessors) {
             sm.step();
+            for (let instruction of sm.completedMemoryInstructions()) {
+                completedMemoryInstructions.push(instruction);
+            }
+            for (let instruction of sm.scheduledMemoryInstructions()) {
+                scheduledMemoryInstructions.push(instruction);
+            }
             // Update line highlights for each warp that has started executing
             for (let warp of sm.controller.nonTerminatedWarps()) {
                 const lineno = warp.programCounter;
@@ -1139,13 +1209,21 @@ class Device {
             }
         }
         this.kernelSource.step();
-        const completedMemoryInstructions = this.L2Cache.step();
+        this.L2Cache.step();
+        const L2CacheStateHandle = this.L2Cache.getCacheState.bind(this.L2Cache);
+        for (let instruction of scheduledMemoryInstructions) {
+            assert(typeof instruction.data.SM_ID !== "undefined", "SM_ID cannot be undefined", {name: "scheduledMemoryInstruction", obj: instruction});
+            assert(typeof instruction.data.index !== "undefined", "memory index cannot be undefined", {name: "scheduledMemoryInstruction", obj: instruction});
+            // Add SM overlay color for every memory slot that was recently accessed by some thread in a warp scheduled to that SM
+            this.memory.touch(instruction.data.SM_ID, instruction.data.index);
+        }
+        this.memory.step(L2CacheStateHandle);
         for (let instruction of completedMemoryInstructions) {
-            // Clear SM overlay from each memory slot
+            assert(typeof instruction.data.SM_ID !== "undefined", "SM_ID cannot be undefined", {name: "completedMemoryInstruction", obj: instruction});
+            assert(typeof instruction.data.index !== "undefined", "memory index cannot be undefined", {name: "completedMemoryInstruction", obj: instruction});
+            // Clear SM overlay color from every memory slot that is no longer accessed by any threads in a warp scheduled to that SM
             this.memory.untouch(instruction.data.SM_ID, instruction.data.index);
         }
-        const L2CacheStateHandle = this.L2Cache.getCacheState.bind(this.L2Cache);
-        this.memory.step(L2CacheStateHandle);
     }
 
     // Revert memory cell state colors
@@ -1165,7 +1243,7 @@ class KernelSource {
             const y = lineno * lineHeight;
             const width = kernelCanvas.width;
             return {
-                queue: [],
+                queue: new Array,
                 colors: Array.from(palette, color => {
                     // Set line highlight alpha lower than SM color
                     let hlColor = color.slice();
@@ -1202,7 +1280,7 @@ class KernelSource {
                 drawable.y = originalY;
                 drawable.height = originalHeight;
             });
-            line.queue = [];
+            line.queue = new Array;
         });
     }
 

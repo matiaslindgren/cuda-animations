@@ -17,7 +17,7 @@ var smCount = 1;
 // Amount of cache lines
 var cacheLineCount = 0;
 // Simulated instruction latencies as SM cycles
-var instructionLatencies = "veryLow";
+var instructionLatencies = "medium";
 // Should the kernel source lines be highlighted with the SM color or not
 var highlightKernelLines = "on";
 var memorySlotSize = 16;
