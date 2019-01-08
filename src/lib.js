@@ -571,10 +571,10 @@ class DeviceMemory extends Drawable {
                     }
                 } else {
                     // No threads are accessing this slot
-                    drawable.draw();
                     if (overlay.hotness > 0) {
                         // Overlay still has alpha to display SM color
                         --overlay.hotness;
+                        drawable.draw();
                     }
                     if (overlay.hotness === 0) {
                         // Set alpha to zero to remove SM color
