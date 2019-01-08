@@ -83,28 +83,28 @@ const CONFIG = {
             memoryAccess: 0,
         },
         veryLow: {
-            name: "(DRAM access only) Very low",
+            name: "Very low",
             arithmetic: 0,
             L2CacheAccess: 0,
             memoryAccess: 2,
         },
-        medium: {
-            name: "Medium",
+        low: {
+            name: "Low",
             arithmetic: 1,
             L2CacheAccess: 5,
-            memoryAccess: 10,
+            memoryAccess: 15,
         },
-        high: {
-            name: "High",
-            arithmetic: 5,
+        reduced: {
+            name: "Reduced",
+            arithmetic: 2,
             L2CacheAccess: 25,
-            memoryAccess: 50,
+            memoryAccess: 75,
         },
         realistic: {
             name: "Realistic",
-            arithmetic: 10,
-            L2CacheAccess: 50,
-            memoryAccess: 500,
+            arithmetic: 15,
+            L2CacheAccess: 60,
+            memoryAccess: 600,
         },
     },
     memory: {
@@ -117,7 +117,7 @@ const CONFIG = {
         },
         slotFillRGBA: [160, 160, 160, 0.2],
         // Amount of animation steps of the cooldown transition after touching a memory index
-        coolDownPeriod: 15,
+        coolDownPeriod: 20,
     },
     cache: {
         // Size of a L2 cacheline in slots
