@@ -11,11 +11,11 @@ var prevRenderFrameID;
 // Application state, mutated with menu bar elements
 
 // Choose default CUDA kernel from kernels.js
-var activeKernel = "ppcStepV0";
+var activeKernel = "ppcStepV1";
 // Amount of streaming multiprocessors in device
-var smCount = 1;
+var smCount = 2;
 // Amount of cache lines
-var cacheLineCount = 0;
+var cacheLineCount = CONFIG.cache.L2CacheLines;
 // Simulated instruction latencies as SM cycles
 var instructionLatencies = "low";
 // Should the kernel source lines be highlighted with the SM color or not
