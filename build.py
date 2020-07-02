@@ -4,7 +4,6 @@ Move index.html and source files to a build dir, while removing comments and all
 import argparse
 import os
 import re
-import shutil
 import sys
 
 assert_pattern = re.compile("assert")
@@ -30,24 +29,19 @@ if __name__ == "__main__":
         default=os.path.join(os.path.curdir, "build"),
         help="Path to build output directory")
     args = parser.parse_args()
-    build_dir = args.build_dir
-    if os.path.exists(build_dir):
-        shutil.rmtree(build_dir)
-    os.mkdir(build_dir)
     for src, drop_patterns in SOURCE_FILES:
         with open(src) as src_f:
             lines = src_f.readlines()
-        dst = os.path.join(build_dir, os.path.basename(src))
+        dst = os.path.join(args.build_dir, os.path.basename(src))
         with open(dst, "w") as dst_f:
             for line in lines:
                 if any(re.search(p, line) for p in drop_patterns):
                     continue
                 dst_f.write(line)
     with open("index.html") as index_f:
-        with open(os.path.join(build_dir, "index.html"), "w") as build_index_f:
+        with open(os.path.join(args.build_dir, "index.html"), "w") as build_index_f:
             # Remove 'src/' from all link and script tag paths
             index_html = index_f.read()
             for pattern in index_html_filter_patterns:
                 index_html = re.sub(pattern, '', index_html)
             build_index_f.write(index_html)
-    shutil.copy(os.path.join("img", "chip.png"), os.path.join(build_dir, "chip.png"))
