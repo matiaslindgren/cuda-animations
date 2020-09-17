@@ -9,16 +9,14 @@ As a consequence, many relevant hardware-level details have been omitted in the 
 
 ```
 git clone --depth 1 https://github.com/matiaslindgren/cuda-animations
+cd cuda-animations
+pip install -r requirements.txt
+make all
+cd build
 python3 -m http.server
 ```
 Open a browser and go to localhost:8000.
 
-You can try removing all assertion calls if the animation is running slow:
-```
-python3 build.py --build-dir build
-cd build
-python3 -m http.server
-```
 
 
 ## GPU global memory access
